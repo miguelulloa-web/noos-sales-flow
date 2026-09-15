@@ -4,12 +4,12 @@
 !.env.example
 
 # Database files
-data/*.db
-data/*.db-journal
-data/*.sqlite
-data/*.sqlite3
+data/
+data_test/
 *.db
+*.db-journal
 *.sqlite
+*.sqlite3
 
 # Dependencies
 node_modules/

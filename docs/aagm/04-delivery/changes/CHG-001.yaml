@@ -3,8 +3,8 @@ requirement: "MVP de Captura y Seguimiento Comercial con IA para NoosAdvisory ba
 modality: MUST
 type: MODIFICATION
 priority: HIGH
-status: READY_FOR_IMPLEMENTATION
-current_stage: READY_FOR_IMPLEMENTATION
+status: IMPLEMENTING
+current_stage: IMPLEMENTING
 owner: ORCHESTRATOR_PM
 decision_refs:
   - "Ruta A aprobada por Sponsor (2026-09-14)"
@@ -13,19 +13,20 @@ impact_analysis_ref: "docs/aagm/04-delivery/impact-analysis/IA-CHG-001.md"
 approvals:
   requirement: "Aprobado por Sponsor (2026-09-14)"
   solution_design: "Aprobado por Sponsor (2026-09-14)"
-  implementation_scope: null
+  implementation_scope: "Autorizado por Sponsor exclusivamente para TP-01 (2026-09-15)"
 task_packets:
-  - TP-01
-  - TP-02
-  - TP-03
-  - TP-04
-  - TP-05
+  - TP-01 (DONE)
+  - TP-02 (AWAITING_IMPLEMENTATION_APPROVAL)
+  - TP-03 (DRAFT)
+  - TP-04 (DRAFT)
+  - TP-05 (DRAFT)
 commits_or_prs: []
 evidence:
   - "docs/aagm/02-solution-design/EV-003-solution-design.md"
   - "docs/aagm/03-planning/EV-004-planning.md"
+  - "docs/aagm/04-delivery/evidence/EV-TP-01.md"
 qa_ref: null
 release: null
 environment: DEV
 production_validation_ref: null
-next_action: "Solicitar autorización scope-bound al Sponsor para iniciar TP-01 en DELIVERY"
+next_action: "Presentar resultados de TP-01 al Sponsor y solicitar autorización formal para TP-02"

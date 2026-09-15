@@ -1,0 +1,25 @@
+{
+  "name": "noos-sales-flow",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "init-db": "node scripts/init-db.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "bugs": {
+    "url": "https://github.com/miguelulloa-web/noos-sales-flow/issues"
+  },
+  "homepage": "https://github.com/miguelulloa-web/noos-sales-flow#readme",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1"
+  }
+}
