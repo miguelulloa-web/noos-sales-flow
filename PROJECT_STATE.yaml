@@ -59,8 +59,8 @@ authorization:
   authorized_at: null
   expires_on_scope_change: true
 next_action:
-  sponsor: "Revisar Project Plan y autorizar implementación de TP-01 para iniciar la fase DELIVERY"
+  sponsor: "Revisar Project Plan v1.1 con 5 TPs y matriz de 18 escenarios, y autorizar implementación de TP-01 para iniciar DELIVERY"
   internal: AWAITING_IMPLEMENTATION_APPROVAL_TP_01
 dashboard:
   sync_status: SYNCED
-  last_synced_at: "2026-09-14T23:10:00-03:00"
+  last_synced_at: "2026-09-14T23:18:00-03:00"

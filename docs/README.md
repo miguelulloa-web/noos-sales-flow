@@ -41,6 +41,7 @@
   - [TP-02.md](file:///Users/miguelulloa/Documents/GitHub/noos-sales-flow/docs/aagm/04-delivery/task-packets/TP-02.md)
   - [TP-03.md](file:///Users/miguelulloa/Documents/GitHub/noos-sales-flow/docs/aagm/04-delivery/task-packets/TP-03.md)
   - [TP-04.md](file:///Users/miguelulloa/Documents/GitHub/noos-sales-flow/docs/aagm/04-delivery/task-packets/TP-04.md)
+  - [TP-05.md](file:///Users/miguelulloa/Documents/GitHub/noos-sales-flow/docs/aagm/04-delivery/task-packets/TP-05.md)
 - `aagm/04-delivery/qa/`: QA independiente.
 - `aagm/04-delivery/evidence/`: evidencia durable.
 - `aagm/05-operations/`: trazabilidad de operaciones y handoff.

@@ -19,6 +19,7 @@ task_packets:
   - TP-02
   - TP-03
   - TP-04
+  - TP-05
 commits_or_prs: []
 evidence:
   - "docs/aagm/02-solution-design/EV-003-solution-design.md"

@@ -12,7 +12,7 @@ task_packets:
     owner: DEVELOPER
   - id: TP-02
     change_id: CHG-001
-    summary: "Ingesta de Solicitudes, Idempotencia y Motor de Extracción con IA Gemini"
+    summary: "Ingesta de Solicitudes, Idempotencia y Motor de Extracción con IA Gemini Real"
     status: READY
     owner: DEVELOPER
   - id: TP-03
@@ -23,5 +23,10 @@ task_packets:
   - id: TP-04
     change_id: CHG-001
     summary: "Gestión Comercial, Bandeja de Vencimientos, Exportación CSV/JSON y Resiliencia"
+    status: READY
+    owner: DEVELOPER
+  - id: TP-05
+    change_id: CHG-001
+    summary: "Integración, Resumen Operativo, 18 Escenarios y Preparación de Demostración"
     status: READY
     owner: DEVELOPER
