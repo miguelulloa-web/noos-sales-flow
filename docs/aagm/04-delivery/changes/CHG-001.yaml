@@ -20,7 +20,9 @@ task_packets:
   - TP-03 (DRAFT)
   - TP-04 (DRAFT)
   - TP-05 (DRAFT)
-commits_or_prs: []
+commits_or_prs:
+  - "8f214f5 (feat: implement TP-01 local foundation, persistence, auth and audit log)"
+  - "779a048 (fix(auth-db): enforce db triggers, exact origin matching, secure bootstrap and real blackbox tests)"
 evidence:
   - "docs/aagm/02-solution-design/EV-003-solution-design.md"
   - "docs/aagm/03-planning/EV-004-planning.md"

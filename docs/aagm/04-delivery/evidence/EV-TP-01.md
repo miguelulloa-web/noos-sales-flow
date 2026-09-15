@@ -1,102 +1,104 @@
-# Evidencia de Entrega — TP-01 Fundación, datos, seguridad y acceso
+# Evidencia de Entrega — TP-01 Fundación, datos, seguridad y acceso (Revalidación)
 
 - **Identificador de Evidencia**: `EV-TP-01`
 - **Fecha de Validación**: `2026-09-15`
 - **Ambiente**: `DEV_LOCAL` (Node.js v24.14.1, SQLite nativo `node:sqlite`, macOS)
 - **Task Packet**: `TP-01` (`docs/aagm/04-delivery/task-packets/TP-01.md`)
-- **Línea base previa**: `ae9749c`
+- **Candidato de código exacto evaluado**: `779a048` (`fix(auth-db): enforce db triggers, exact origin matching, secure bootstrap and real blackbox tests`)
+- **Línea base previa**: `8f214f5` (commit inicial de TP-01)
 - **Estado**: `PASS`
 - **Rol evaluador**: QA / ORCHESTRATOR_PM
 
 ---
 
-## 1. Alcance Validado de TP-01
+## 1. Alcance Validado y Acciones Correctivas Aplicadas
 
-Se validó de manera estricta y exclusiva el alcance asignado a TP-01:
-1. Servidor Express local con arquitectura modular en ESM (`src/db.js`, `src/auth.js`, `src/middleware.js`, `src/app.js`, `src/server.js`).
-2. Persistencia local con SQLite nativo (`DatabaseSync` de `node:sqlite`) con creación automática del directorio `data/` y archivo `data/noos_sales_flow.db`.
-3. Tablas relacionales con llaves foráneas e índices:
-   - `users` (id, name, email, password_hash, role, is_active, created_at)
-   - `auth_sessions` (id, session_token_hash, user_id, expires_at, created_at, revoked_at)
-   - `audit_log` (id, lead_id, event_type, entity_type, entity_id, previous_state_json, new_state_json, actor_user_id, timestamp)
-   - `ai_config` (id, config_key, model_identifier, prompt_template, schema_definition_json, version, is_active, updated_at)
-4. Hashing de contraseñas con `bcryptjs` (salt rounds = 10).
-5. Tokens de sesión criptográficamente seguros (32 bytes / 64 caracteres hex) transmitidos exclusivamente al navegador en cookie `HttpOnly` y almacenados en SQLite estrictamente como hash digest SHA-256 (`session_token_hash`).
-6. Configuración de cookie `noos_session`: `HttpOnly: true`, `SameSite: Lax`, `Path: /`, `Max-Age: 86400000` (24 horas). En DEV local HTTP `Secure: false`, configurable para HTTPS.
-7. Mitigación CSRF en métodos mutativos (`POST`, `PUT`, `PATCH`, `DELETE`) validando cabeceras `Origin` / `Referer` restringidas a orígenes locales autorizados (`localhost`, `127.0.0.1`).
-8. Control de acceso basado en roles (`ADMIN` vs `OPERATOR` / `DEMO_USER`). El endpoint `/api/audit-logs` exige rol `ADMIN` (retorna 403 ante usuarios con rol `OPERATOR`).
-9. Registro de auditoría estrictamente append-only (solo métodos `INSERT` y `SELECT`; sin interfaz de actualización ni eliminación en la capa de datos).
-10. Persistencia local verificada tras reconexión a la base de datos (simulación de reinicio de proceso).
+Tras la revisión independiente del Sponsor, se aplicaron y validaron las siguientes correcciones sobre TP-01:
+
+1. **Bootstrap Seguro de Cuentas (`scripts/init-db.js`)**:
+   - Se eliminó cualquier impresión de contraseñas o tokens en `stdout`, `stderr` o logs.
+   - En ejecución desatendida se exigen variables de entorno `INITIAL_ADMIN_PASSWORD` e `INITIAL_DEMO_PASSWORD`. En terminal interactivo (`TTY`) se solicita mediante entrada enmascarada oculta sin eco.
+   - Plantilla [.env.example](file:///Users/miguelulloa/Documents/GitHub/noos-sales-flow/.env.example) actualizada con todas las variables activas del sistema y sin `SESSION_SECRET` (innecesario al usar tokens criptográficos aleatorios con hash SHA-256 en BD).
+   - Se verificó mediante prueba automatizada que los flujos de log no contienen las contraseñas empleadas.
+
+2. **Inmutabilidad Efectiva de `audit_log` en Tres Niveles**:
+   - **Nivel API**: No existen endpoints REST que permitan modificar o eliminar entradas de auditoría.
+   - **Nivel Capa de Datos (`src/db.js`)**: El módulo expone únicamente `appendAuditLog` y `getAuditLogs`. No existen métodos `updateAuditLog` ni `deleteAuditLog`.
+   - **Nivel Motor de Base de Datos (SQLite)**: Triggers declarativos `prevent_audit_log_update` y `prevent_audit_log_delete` creados en `initSchema`. Ante cualquier sentencia SQL directa `UPDATE audit_log` o `DELETE FROM audit_log`, el motor aborta la transacción con error `RAISE(ABORT)`. Verificado mediante pruebas negativas directas de SQL.
+
+3. **Mitigación CSRF y Validación Estricta de Origen (`src/middleware.js`)**:
+   - Restringe métodos mutativos (`POST`, `PUT`, `PATCH`, `DELETE`) comparando exactamente el origen contra `http://localhost:${PORT}` y `http://127.0.0.1:${PORT}` (normalizando puerto dinámico) y `ALLOWED_ORIGINS` normalizados.
+   - Comprobado que peticiones desde otro puerto local (ej. `http://localhost:4000`) o desde dominios externos son bloqueadas con HTTP `403 Forbidden`.
+
+4. **Prueba Black-box de Servidor Real e Independiente (`tests/blackbox.test.js`)**:
+   - Proceso independiente `src/server.js` levantado mediante `child_process.spawn` en puerto dedicado.
+   - Interacción mediante `fetch` HTTP real: login, emisión de cookie `noos_session`, consulta de sesión `/api/auth/me`, control de roles en `/api/audit-logs` y bloqueo CSRF.
+   - Detención forzada del proceso (`SIGTERM`).
+   - Levantamiento de un segundo proceso de servidor independiente contra el mismo archivo SQLite.
+   - Verificación empírica de persistencia de sesión a través del reinicio real del proceso servidor.
+   - Verificación de ausencia de contraseñas o tokens en los flujos capturados del proceso.
 
 ---
 
 ## 2. Resultados de Pruebas Automatizadas
 
-Comando ejecutado: `npm test` (`node --test tests/*.test.js`)
-Entorno: Sandbox DEV local aislado
+Comando de ejecución: `npm test` (`node --test tests/*.test.js`)  
+Candidato exacto: commit `779a048`  
+Resultado: **8 tests pasados, 0 fallos, 0 omitidos**
 
 ```text
 > noos-sales-flow@1.0.0 test
 > node --test tests/*.test.js
 
-✔ 1. Database schema initialization, indices, and default AI config (11.28ms)
-✔ 2. Password hashing with bcrypt and user creation (245.88ms)
-✔ 3. Session token hashing, retrieval, expiration, and revocation (14.51ms)
-✔ 4. Append-only Audit Log verification (12.51ms)
-✔ 5. Local persistence across database reconnects (reinicio simulado) (5.12ms)
-✔ 6. HTTP Endpoints: Login, Auth Me, Audit Logs, Logout, CSRF, and Role Control (426.30ms)
-ℹ tests 6
+✔ 1. Database schema initialization, indices, and default AI config (9.54ms)
+✔ 2. Password hashing with bcrypt and user creation (241.98ms)
+✔ 3. Session token hashing, retrieval, expiration, and revocation (9.44ms)
+✔ 4. Append-only Audit Log verification and SQLite database triggers protection (8.73ms)
+✔ 5. Bootstrap script: seeds users securely without leaking passwords or tokens to logs (304.88ms)
+✔ 6. Local persistence across database reconnects (reinicio simulado) (7.85ms)
+✔ 7. HTTP Endpoints: Login, Auth Me, Audit Logs, Logout, Exact Origin Matching, and Role Control (394.06ms)
+✔ Black-box Real Server Lifecycle: independent processes, real HTTP, CSRF, and post-restart persistence (755.40ms)
+
+ℹ tests 8
 ℹ suites 0
-ℹ pass 6
+ℹ pass 8
 ℹ fail 0
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 894.37ms
+ℹ duration_ms 1116.44ms
 ```
 
-Detalle de verificaciones por prueba:
-- **Test 1**: Creación de tablas (`users`, `auth_sessions`, `audit_log`, `ai_config`) y sembrado inicial de configuración de IA (`gemini-2.5-flash`).
-- **Test 2**: Bcrypt hash verificado con match exacto y rechazo ante contraseña incorrecta; persistencia de hash en tabla `users`.
-- **Test 3**: Token de sesión aleatorio verificado; cálculo de hash SHA-256; verificación de que el token plano no existe en la base de datos; expiración temporal y revocación de sesión (`revoked_at`).
-- **Test 4**: Inserción secuencial en `audit_log`; consulta ordenada por timestamp; ausencia de métodos `deleteAuditLog` o `updateAuditLog`.
-- **Test 5**: Cierre de conexión a SQLite, reapertura del archivo exacto y verificación de integridad de datos persistidos.
-- **Test 6**: Simulación completa HTTP:
-  - `GET /api/health` -> 200 OK.
-  - `POST /api/auth/login` con credenciales inválidas -> 401 Unauthorized.
-  - `POST /api/auth/login` con credenciales válidas -> 200 OK, emisión de cookie `noos_session` con `HttpOnly` y `SameSite=Lax`.
-  - `GET /api/auth/me` con cookie de sesión activa -> 200 OK.
-  - `GET /api/audit-logs` como `ADMIN` -> 200 OK.
-  - `GET /api/audit-logs` como `OPERATOR` -> 403 Forbidden.
-  - `POST /api/auth/logout` -> 200 OK, revocación en base de datos y limpieza de cookie.
-  - `GET /api/auth/me` post-logout -> 401 Unauthorized.
-  - Petición POST mutativa con `Origin: https://malicious-site.com` -> 403 Forbidden.
+---
+
+## 3. Matriz de Cumplimiento de Criterios de Seguridad
+
+| Control de Seguridad | Nivel de Enforzamiento | Estado | Evidencia Observada |
+| :--- | :--- | :---: | :--- |
+| **Protección de Contraseñas** | Capa de Autenticación | CUMPLE | `bcryptjs` con 10 rondas de salting. Sin contraseñas en claro en base de datos, logs o Git. |
+| **Protección de Tokens de Sesión** | Capa de Datos y Red | CUMPLE | Token plano reside únicamente en cookie de cliente. En SQLite solo se guarda el hash SHA-256 (`session_token_hash`). |
+| **Cookies de Sesión Seguras** | Protocolo HTTP | CUMPLE | Banderas `HttpOnly: true`, `SameSite: Lax`, vigencia de 24 horas (`Max-Age: 86400000`) y `Secure` según ambiente. |
+| **Mitigación CSRF** | Middleware de Red | CUMPLE | Validación exacta de origen y puerto (`localhost:${PORT}`, `127.0.0.1:${PORT}`); puertos no autorizados rechazados con 403. |
+| **Control de Roles (RBAC)** | Middleware de Autorización | CUMPLE | `requireRole('ADMIN')` bloquea con 403 a usuarios con rol `OPERATOR` en `/api/audit-logs`. |
+| **Inmutabilidad Audit Log** | Motor SQLite (Triggers) + Capa Datos | CUMPLE | Triggers de base de datos abortan `UPDATE` y `DELETE` directos. Capa de datos solo expone `INSERT` y `SELECT`. |
+| **Fuga de Secretos en Bootstrap** | Script de Sembrado CLI | CUMPLE | Test automatizado verificó que las contraseñas empleadas no aparecen en stdout, stderr ni registros de log. |
+| **Persistencia ante Reinicio** | Proceso del Sistema Operativo | CUMPLE | Prueba black-box validó que una sesión activa sobrevive a la terminación del proceso y reinicio de un nuevo proceso sobre el mismo archivo `.db`. |
+| **Aislamiento de Secretos en Git** | Control de Versiones | CUMPLE | `.gitignore` configurado; bases de datos (`data/`, `data_test*`) y archivos `.env` ignorados; repositorio 100% limpio. |
+| **Confinamiento de Entorno** | Operaciones Git / Infra | CUMPLE | Ejecución estrictamente en DEV local. Sin push al repositorio remoto ni despliegues cloud. |
 
 ---
 
-## 3. Comprobaciones de Seguridad
+## 4. Limitaciones Reales
 
-| Criterio de Seguridad | Estado | Evidencia Observada |
-| :--- | :---: | :--- |
-| **Protección de Contraseñas** | CUMPLE | Se utiliza `bcryptjs` con 10 rondas de salt. Las contraseñas en texto plano nunca se registran en BD, logs o Git. |
-| **Protección de Tokens de Sesión** | CUMPLE | El token en texto plano vive únicamente en la cookie `HttpOnly` del cliente. En SQLite (`auth_sessions`) solo se guarda el digest SHA-256 (`session_token_hash`). |
-| **Seguridad de Cookies** | CUMPLE | `HttpOnly: true`, `SameSite: Lax`, `Path: /`, duración acotada a 24 horas (`Max-Age: 86400000`). |
-| **Mitigación CSRF** | CUMPLE | Middleware `csrfOriginProtection` valida cabeceras `Origin` / `Referer` en métodos mutativos; orígenes no locales reciben 403. |
-| **Control de Roles (RBAC)** | CUMPLE | Middleware `requireRole` aísla endpoints administrativos; verificado que `OPERATOR` recibe 403 en `/api/audit-logs`. |
-| **Inmutabilidad de Auditoría** | CUMPLE | Capa de datos `src/db.js` solo expone `appendAuditLog` y `getAuditLogs`. No hay interfaz de modificación ni borrado. |
-| **Aislamiento de Secretos en Git** | CUMPLE | `.gitignore` incluye explícitamente `.env`, `.env.*`, `data/`, `data_test/`, `*.db`, `*.sqlite`. Verificado con `git status`. |
-| **Protección contra Fuga Externa** | CUMPLE | Trabajo confinado a DEV local. No se ejecutó `git push` al repositorio remoto. |
+1. **Almacenamiento Local**: La base de datos opera exclusivamente sobre el sistema de archivos local (`data/noos_sales_flow.db`). No cuenta con réplica ni respaldo automático en la nube (conforme a la decisión del Sponsor de implementar la Ruta A).
+2. **Ambiente HTTP en Desarrollo**: En DEV local (`localhost:3000`), las cookies se transmiten sin el flag `Secure` obligatorio de HTTPS para permitir el funcionamiento en navegadores locales estándar. En producción o HTTPS, el flag `Secure` se activa automáticamente mediante la configuración de entorno.
+3. **Puntualidad de Conexiones en Sandbox**: La ejecución de pruebas black-box con sockets TCP reales requiere permisos de red local dentro del host del desarrollador.
 
 ---
 
-## 4. Limitaciones y Desviaciones
+## 5. Conclusión y Veredicto de QA
 
-- **Desviaciones de alcance**: Ninguna. No se introdujeron funcionalidades de captura (TP-02), bandejas (TP-03), demo/exportación (TP-04) ni hardening transversal (TP-05).
-- **Limitación conocida**: La persistencia es local en el archivo `data/noos_sales_flow.db`. Esta base de datos no debe compartirse ni comprometerse al control de versiones.
+El Task Packet `TP-01` ha subsanado la totalidad de las observaciones de la revisión independiente, acreditando cumplimiento verificable en código, pruebas unitarias, pruebas de integración, pruebas negativas de base de datos y pruebas black-box de proceso real.
 
----
-
-## 5. Conclusión
-
-El `TP-01` cumple el 100% de los criterios de aceptación, pruebas y requisitos de seguridad definidos en el `PROJECT_PLAN.md` v1.1.
-Estado resultante: **DONE**.
+Veredicto: **PASS**.  
+Recomendación: Restituir formalmente el estado **`DONE`** para `TP-01`.

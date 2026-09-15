@@ -41,9 +41,9 @@ changes:
 environments:
   - logical_name: DEV
     physical_target: "http://localhost:3000"
-    version: "v0.1.0-dev (TP-01 complete)"
+    version: "v0.1.0-dev (TP-01 complete & revalidated)"
     protection: UNPROTECTED
-    validation: "Pass (npm test: 6/6 automated tests PASS)"
+    validation: "Pass (npm test: 8/8 automated tests PASS, unit + black-box)"
   - logical_name: STAGE_GCP
     physical_target: "Google Cloud Run"
     version: null
@@ -55,13 +55,13 @@ quality:
   regression: PASS
   release_gate: NOT_EVALUATED
 authorization:
-  implementation_scope: "TP-01 — Fundación, datos, seguridad y acceso (COMPLETADO)"
+  implementation_scope: "TP-01 — Fundación, datos, seguridad y acceso (REVALIDADO Y COMPLETADO)"
   authorized_by: "Sponsor (Miguel Ulloa)"
   authorized_at: "2026-09-15T12:44:30-03:00"
   expires_on_scope_change: true
 next_action:
-  sponsor: "Revisar resultados y evidencia de TP-01 (EV-TP-01.md), y autorizar implementación de TP-02"
+  sponsor: "Revisar evidencia corregida de TP-01 (EV-TP-01.md, commits 8f214f5 y 779a048) y evaluar autorización de TP-02"
   internal: AWAITING_IMPLEMENTATION_APPROVAL_TP_02
 dashboard:
   sync_status: SYNCED
-  last_synced_at: "2026-09-15T13:15:00-03:00"
+  last_synced_at: "2026-09-15T13:45:00-03:00"
