@@ -40,7 +40,7 @@ changes:
 environments:
   - logical_name: DEV
     physical_target: "http://localhost:3000"
-    version: "v0.1.0-dev (commit b810b11)"
+    version: "v0.1.0-dev (commit 251ff7f)"
     protection: UNPROTECTED
     validation: "Empirical / Unit tests"
   - logical_name: STAGE_GCP

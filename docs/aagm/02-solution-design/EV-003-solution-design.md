@@ -3,7 +3,7 @@
 - **Change / TP:** CHG-001 / ARCHITECTURE-SPEC-REVISION-V1.2
 - **Tipo:** Especificación final de Solution Design con Adopción de Ruta A y Gobernanza Completa
 - **Ambiente lógico / target físico:** LOCAL / Repositorio noos-sales-flow (macOS)
-- **Candidato exacto:** commit b810b11 (docs: establish AAGM baseline through solution design)
+- **Candidato exacto:** commit 251ff7f (docs: establish AAGM baseline through solution design)
 - **Ejecutado por rol/agente:** SOLUTION_ARCHITECT (coordinado por ORCHESTRATOR_PM)
 - **Fecha UTC:** 2026-09-15T02:00:00Z
 - **Método reproducible:**

@@ -3,7 +3,7 @@
 - **Change / TP:** FASE_DISCOVERY / DISCOVERY-ANALYSIS
 - **Tipo:** Análisis de Discovery, especificación de benchmark de diseño y requisitos verificables del MVP
 - **Ambiente lógico / target físico:** LOCAL / Repositorio noos-sales-flow (macOS)
-- **Candidato exacto:** commit b810b11 (docs: establish AAGM baseline through solution design)
+- **Candidato exacto:** commit 251ff7f (docs: establish AAGM baseline through solution design)
 - **Ejecutado por rol/agente:** SOLUTION_ARCHITECT (coordinado por ORCHESTRATOR_PM)
 - **Fecha UTC:** 2026-09-15T01:20:00Z
 - **Método reproducible:**

@@ -3,7 +3,7 @@
 - **Change / TP:** FASE_BOOTSTRAP / BOOTSTRAP-INIT
 - **Tipo:** Verificación de instalación de metodología AAGM v1.10 y registro de Sponsor Intake
 - **Ambiente lógico / target físico:** LOCAL / Worktree noos-sales-flow (macOS)
-- **Candidato exacto:** commit b810b11 (docs: establish AAGM baseline through solution design)
+- **Candidato exacto:** commit 251ff7f (docs: establish AAGM baseline through solution design)
 - **Ejecutado por rol/agente:** ORCHESTRATOR_PM
 - **Fecha UTC:** 2026-09-15T01:10:00Z
 - **Método reproducible:**
