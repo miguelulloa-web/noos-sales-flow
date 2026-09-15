@@ -2,6 +2,26 @@ schema_version: "1.10"
 changes:
   - id: CHG-001
     summary: "MVP de Captura y Seguimiento Comercial con IA (Ruta A: DEV Local SQLite, Auth/Sesiones, Idempotencia, Borradores STALE, Auditoría Append-Only)"
-    status: ANALYZING
+    status: READY_FOR_IMPLEMENTATION
     owner: ORCHESTRATOR_PM
-task_packets: []
+task_packets:
+  - id: TP-01
+    change_id: CHG-001
+    summary: "Fundación, Persistencia SQLite, Autenticación de Sesiones y Auditoría Append-Only"
+    status: READY
+    owner: DEVELOPER
+  - id: TP-02
+    change_id: CHG-001
+    summary: "Ingesta de Solicitudes, Idempotencia y Motor de Extracción con IA Gemini"
+    status: READY
+    owner: DEVELOPER
+  - id: TP-03
+    change_id: CHG-001
+    summary: "Triage UI Master-Detail, Hechos Confirmados y Borradores con Estado STALE"
+    status: READY
+    owner: DEVELOPER
+  - id: TP-04
+    change_id: CHG-001
+    summary: "Gestión Comercial, Bandeja de Vencimientos, Exportación CSV/JSON y Resiliencia"
+    status: READY
+    owner: DEVELOPER

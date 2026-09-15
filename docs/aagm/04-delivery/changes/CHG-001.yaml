@@ -3,8 +3,8 @@ requirement: "MVP de Captura y Seguimiento Comercial con IA para NoosAdvisory ba
 modality: MUST
 type: MODIFICATION
 priority: HIGH
-status: ANALYZING
-current_stage: SOLUTION_DESIGN_APPROVED
+status: READY_FOR_IMPLEMENTATION
+current_stage: READY_FOR_IMPLEMENTATION
 owner: ORCHESTRATOR_PM
 decision_refs:
   - "Ruta A aprobada por Sponsor (2026-09-14)"
@@ -14,12 +14,17 @@ approvals:
   requirement: "Aprobado por Sponsor (2026-09-14)"
   solution_design: "Aprobado por Sponsor (2026-09-14)"
   implementation_scope: null
-task_packets: []
+task_packets:
+  - TP-01
+  - TP-02
+  - TP-03
+  - TP-04
 commits_or_prs: []
 evidence:
   - "docs/aagm/02-solution-design/EV-003-solution-design.md"
+  - "docs/aagm/03-planning/EV-004-planning.md"
 qa_ref: null
 release: null
 environment: DEV
 production_validation_ref: null
-next_action: "Formular Project Plan y Task Packets en la fase PLANNING para autorización de implementación"
+next_action: "Solicitar autorización scope-bound al Sponsor para iniciar TP-01 en DELIVERY"

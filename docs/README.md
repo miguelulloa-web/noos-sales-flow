@@ -29,13 +29,20 @@
   - [ENVIRONMENT_CONTRACT_STAGE_GCP.yaml](file:///Users/miguelulloa/Documents/GitHub/noos-sales-flow/docs/aagm/02-solution-design/ENVIRONMENT_CONTRACT_STAGE_GCP.yaml)
   - [DATA_MODEL.md](file:///Users/miguelulloa/Documents/GitHub/noos-sales-flow/docs/aagm/02-solution-design/DATA_MODEL.md)
   - [EV-003-solution-design.md](file:///Users/miguelulloa/Documents/GitHub/noos-sales-flow/docs/aagm/02-solution-design/EV-003-solution-design.md)
-- `aagm/03-planning/` a `aagm/05-operations/`: trazabilidad de fases posteriores.
+- `aagm/03-planning/`: planificación de ejecución, hitos y control de avance.
+  - [PROJECT_PLAN.md](file:///Users/miguelulloa/Documents/GitHub/noos-sales-flow/docs/aagm/03-planning/PROJECT_PLAN.md)
+  - [EV-004-planning.md](file:///Users/miguelulloa/Documents/GitHub/noos-sales-flow/docs/aagm/03-planning/EV-004-planning.md)
 - `aagm/04-delivery/changes/`: Changes.
   - [CHG-001.yaml](file:///Users/miguelulloa/Documents/GitHub/noos-sales-flow/docs/aagm/04-delivery/changes/CHG-001.yaml)
 - `aagm/04-delivery/impact-analysis/`: Análisis de impacto.
   - [IA-CHG-001.md](file:///Users/miguelulloa/Documents/GitHub/noos-sales-flow/docs/aagm/04-delivery/impact-analysis/IA-CHG-001.md)
 - `aagm/04-delivery/task-packets/`: Task Packets.
+  - [TP-01.md](file:///Users/miguelulloa/Documents/GitHub/noos-sales-flow/docs/aagm/04-delivery/task-packets/TP-01.md)
+  - [TP-02.md](file:///Users/miguelulloa/Documents/GitHub/noos-sales-flow/docs/aagm/04-delivery/task-packets/TP-02.md)
+  - [TP-03.md](file:///Users/miguelulloa/Documents/GitHub/noos-sales-flow/docs/aagm/04-delivery/task-packets/TP-03.md)
+  - [TP-04.md](file:///Users/miguelulloa/Documents/GitHub/noos-sales-flow/docs/aagm/04-delivery/task-packets/TP-04.md)
 - `aagm/04-delivery/qa/`: QA independiente.
 - `aagm/04-delivery/evidence/`: evidencia durable.
+- `aagm/05-operations/`: trazabilidad de operaciones y handoff.
 
 Mantén enlaces a documentos reales y elimina entradas vacías cuando no apliquen. Una persona que no conozca AAGM debe encontrar documentación de usuario, técnica, operaciones, decisiones, calidad y estado desde este mapa.

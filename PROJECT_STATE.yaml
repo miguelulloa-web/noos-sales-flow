@@ -2,7 +2,7 @@ schema_version: "1.10"
 methodology_version: "1.10"
 project:
   name: "Noos Sales Flow"
-  phase: SOLUTION_DESIGN
+  phase: PLANNING
   health: HEALTHY
   level: A
   autonomy: CONTROLLED
@@ -10,15 +10,15 @@ project:
   sponsor_profile: LIMITED
   sponsor_language: es
 transition:
-  previous_phase: DISCOVERY
+  previous_phase: SOLUTION_DESIGN
   exit_criteria:
-    - "Design Benchmark Specification documentado con criterios de UX/UI verificables"
-    - "Requisitos funcionales y no funcionales formalizados con modalidad MUST/SHOULD"
-    - "Delimitaciones y exclusiones de alcance de MVP aprobadas"
-    - "Evidencia durable EV-002-discovery registrada"
+    - "Solution Design v1.2 aprobado formalmente por Sponsor (Ruta A)"
+    - "Contratos de ambiente y modelo de datos alineados"
+    - "Línea base registrada en commit 251ff7f y referencias corregidas"
+    - "Evidencia durable EV-003-solution-design v1.2 registrada"
   evidence_refs:
-    - "docs/aagm/01-discovery/EV-002-discovery.md"
-  recorded_at: "2026-09-14T22:20:00-03:00"
+    - "docs/aagm/02-solution-design/EV-003-solution-design.md"
+  recorded_at: "2026-09-14T23:10:00-03:00"
 readiness:
   delivery: NOT_READY
   release: NOT_READY
@@ -35,7 +35,7 @@ integrations:
     state: DEFERRED
 changes:
   - id: CHG-001
-    status: ANALYZING
+    status: READY_FOR_IMPLEMENTATION
     owner: ORCHESTRATOR_PM
 environments:
   - logical_name: DEV
@@ -59,8 +59,8 @@ authorization:
   authorized_at: null
   expires_on_scope_change: true
 next_action:
-  sponsor: "Abrir el proyecto desde la nueva ubicación /Users/miguelulloa/Documents/GitHub/noos-sales-flow y ejecutar /aagm-continue para iniciar PLANNING"
-  internal: AWAITING_NEW_WORKSPACE_OPEN
+  sponsor: "Revisar Project Plan y autorizar implementación de TP-01 para iniciar la fase DELIVERY"
+  internal: AWAITING_IMPLEMENTATION_APPROVAL_TP_01
 dashboard:
   sync_status: SYNCED
-  last_synced_at: "2026-09-14T22:58:00-03:00"
+  last_synced_at: "2026-09-14T23:10:00-03:00"
