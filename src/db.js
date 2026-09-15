@@ -87,6 +87,19 @@ export function initSchema(db = getDb()) {
     CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON auth_sessions(user_id);
     CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log(entity_type, entity_id);
     CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp);
+
+    -- Enforce append-only integrity at SQLite engine level: forbid UPDATE and DELETE
+    CREATE TRIGGER IF NOT EXISTS prevent_audit_log_update
+    BEFORE UPDATE ON audit_log
+    BEGIN
+      SELECT RAISE(ABORT, 'audit_log is strictly append-only: UPDATE operations are forbidden');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS prevent_audit_log_delete
+    BEFORE DELETE ON audit_log
+    BEGIN
+      SELECT RAISE(ABORT, 'audit_log is strictly append-only: DELETE operations are forbidden');
+    END;
   `);
 
   // Seed default AI config if not present

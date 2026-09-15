@@ -3,7 +3,8 @@ import { getActiveSessionByTokenHash } from './db.js';
 
 /**
  * Middleware to enforce Origin/Referer verification on mutative requests (CSRF mitigation).
- * Restricts mutative calls to localhost / 127.0.0.1 in local DEV.
+ * Restricts mutative calls to exact local origins (http://localhost:${PORT} and http://127.0.0.1:${PORT})
+ * or explicitly configured and normalized ALLOWED_ORIGINS.
  */
 export function csrfOriginProtection(req, res, next) {
   const mutativeMethods = ['POST', 'PUT', 'PATCH', 'DELETE'];
@@ -14,37 +15,50 @@ export function csrfOriginProtection(req, res, next) {
   const origin = req.headers['origin'];
   const referer = req.headers['referer'];
 
-  // Allowed origins in local DEV
-  const allowedHosts = ['localhost', '127.0.0.1'];
-  const customAllowed = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [];
+  const port = process.env.PORT || '3000';
+  
+  // Exact allowed origins
+  const exactAllowedOrigins = new Set([
+    `http://localhost:${port}`,
+    `http://127.0.0.1:${port}`
+  ]);
 
-  const checkUrl = (urlStr) => {
+  if (process.env.ALLOWED_ORIGINS) {
+    process.env.ALLOWED_ORIGINS.split(',')
+      .map(o => o.trim())
+      .filter(Boolean)
+      .forEach(o => {
+        try {
+          const parsed = new URL(o);
+          exactAllowedOrigins.add(parsed.origin);
+        } catch {}
+      });
+  }
+
+  const checkAllowed = (urlStr) => {
     try {
       const parsed = new URL(urlStr);
-      if (allowedHosts.includes(parsed.hostname)) return true;
-      if (customAllowed.includes(parsed.origin)) return true;
-      return false;
+      return exactAllowedOrigins.has(parsed.origin);
     } catch {
       return false;
     }
   };
 
-  if (origin && checkUrl(origin)) {
+  if (origin && checkAllowed(origin)) {
     return next();
   }
 
-  if (referer && checkUrl(referer)) {
+  if (referer && checkAllowed(referer)) {
     return next();
   }
 
-  // If neither Origin nor Referer matches an allowed local origin
-  // Note: for automated unit tests that do not supply browser headers, allow if explicitly bypassed in test env
-  if (process.env.NODE_ENV === 'test' && !origin && !referer) {
+  // Note: for automated tests that intentionally do not supply browser headers, allow only if test env bypass
+  if (process.env.NODE_ENV === 'test' && !origin && !referer && process.env.BYPASS_CSRF_FOR_TEST === 'true') {
     return next();
   }
 
   return res.status(403).json({
-    error: 'Origin not allowed: mutative requests must originate from local environment'
+    error: 'Origin not allowed: mutative requests must originate from authorized local origin and port'
   });
 }
 

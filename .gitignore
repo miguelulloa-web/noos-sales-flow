@@ -6,6 +6,7 @@
 # Database files
 data/
 data_test/
+data_test_blackbox/
 *.db
 *.db-journal
 *.sqlite

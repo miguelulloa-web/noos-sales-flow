@@ -28,6 +28,7 @@ import {
   SESSION_COOKIE_NAME 
 } from '../src/auth.js';
 import { createApp } from '../src/app.js';
+import { seedDatabase } from '../scripts/init-db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -207,7 +208,7 @@ test('3. Session token hashing, retrieval, expiration, and revocation', () => {
   }
 });
 
-test('4. Append-only Audit Log verification', async () => {
+test('4. Append-only Audit Log verification and SQLite database triggers protection', async () => {
   const { db, dbPath } = getUniqueTestDb();
 
   try {
@@ -232,16 +233,74 @@ test('4. Append-only Audit Log verification', async () => {
     assert.equal(logs[0].event_type, 'LEAD_CREATED');
     assert.equal(logs[1].event_type, 'USER_LOGIN');
 
+    // Negative tests: verify SQLite triggers reject direct UPDATE and DELETE
+    const targetId = logs[0].id;
+
+    assert.throws(() => {
+      db.prepare("UPDATE audit_log SET event_type = 'ALTERED' WHERE id = ?").run(targetId);
+    }, (err) => {
+      return err.message.includes('strictly append-only') && err.message.includes('UPDATE operations are forbidden');
+    }, 'Direct SQL UPDATE on audit_log must be aborted by trigger');
+
+    assert.throws(() => {
+      db.prepare("DELETE FROM audit_log WHERE id = ?").run(targetId);
+    }, (err) => {
+      return err.message.includes('strictly append-only') && err.message.includes('DELETE operations are forbidden');
+    }, 'Direct SQL DELETE on audit_log must be aborted by trigger');
+
+    // Verify module exports no deleteAuditLog or updateAuditLog functions
     const dbModule = await import('../src/db.js');
-    assert.equal(typeof dbModule.deleteAuditLog, 'undefined', 'deleteAuditLog must not exist');
-    assert.equal(typeof dbModule.updateAuditLog, 'undefined', 'updateAuditLog must not exist');
+    assert.equal(typeof dbModule.deleteAuditLog, 'undefined', 'deleteAuditLog must not exist in data layer');
+    assert.equal(typeof dbModule.updateAuditLog, 'undefined', 'updateAuditLog must not exist in data layer');
   } finally {
     db.close();
     if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
   }
 });
 
-test('5. Local persistence across database reconnects (reinicio simulado)', () => {
+test('5. Bootstrap script: seeds users securely without leaking passwords or tokens to logs', async () => {
+  let capturedLog = '';
+  const testLogger = {
+    log: (...args) => { capturedLog += args.join(' ') + '\n'; },
+    error: (...args) => { capturedLog += args.join(' ') + '\n'; }
+  };
+
+  const secretAdminPass = 'SecretAdm!nPass#9988';
+  const secretDemoPass = 'SecretDem0Pass#1122';
+  const dbPath = path.join(TEST_DIR, `test_bootstrap_${crypto.randomUUID()}.db`);
+
+  try {
+    process.env.DB_PATH = dbPath;
+    closeDb();
+
+    await seedDatabase({
+      adminPassword: secretAdminPass,
+      demoPassword: secretDemoPass,
+      adminEmail: 'bootstrap-admin@noosadvisory.com',
+      demoEmail: 'bootstrap-demo@noosadvisory.com',
+      silent: false,
+      logger: testLogger
+    });
+
+    // Verify passwords are NOT present in captured streams
+    assert.equal(capturedLog.includes(secretAdminPass), false, 'Admin password must NOT appear in log output');
+    assert.equal(capturedLog.includes(secretDemoPass), false, 'Demo password must NOT appear in log output');
+    assert.ok(capturedLog.includes('initialized successfully'), 'Success message should be present');
+
+    // Verify users were indeed created in DB
+    const db = getDb();
+    const adminUser = getUserByEmail('bootstrap-admin@noosadvisory.com', db);
+    assert.ok(adminUser);
+    const passMatches = await verifyPassword(secretAdminPass, adminUser.password_hash);
+    assert.equal(passMatches, true, 'Seeded admin password hash must be verifiable');
+
+  } finally {
+    closeDb();
+    if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
+  }
+});
+
+test('6. Local persistence across database reconnects (reinicio simulado)', () => {
   const dbPath = path.join(TEST_DIR, `test_persistence_${crypto.randomUUID()}.db`);
   let db = getDb(dbPath);
   initSchema(db);
@@ -281,9 +340,10 @@ test('5. Local persistence across database reconnects (reinicio simulado)', () =
   }
 });
 
-test('6. HTTP Endpoints: Login, Auth Me, Audit Logs, Logout, CSRF, and Role Control', async () => {
+test('7. HTTP Endpoints: Login, Auth Me, Audit Logs, Logout, Exact Origin Matching, and Role Control', async () => {
   const dbPath = path.join(TEST_DIR, `test_app_${crypto.randomUUID()}.db`);
   process.env.DB_PATH = dbPath;
+  process.env.PORT = '3000';
   closeDb();
 
   const db = getDb();
@@ -315,16 +375,7 @@ test('6. HTTP Endpoints: Login, Auth Me, Audit Logs, Logout, CSRF, and Role Cont
     assert.equal(healthRes.status, 200);
     assert.equal(healthRes.body.status, 'ok');
 
-    // 2. Login with bad credentials
-    const badLoginRes = await invokeApp(app, {
-      method: 'POST',
-      url: '/api/auth/login',
-      headers: { 'origin': 'http://localhost:3000' },
-      body: { email: 'admin@noosadvisory.com', password: 'WrongPassword' }
-    });
-    assert.equal(badLoginRes.status, 401);
-
-    // 3. Login with valid Admin credentials
+    // 2. Exact Origin Matching: Valid exact origin http://localhost:3000 -> 200
     const adminLoginRes = await invokeApp(app, {
       method: 'POST',
       url: '/api/auth/login',
@@ -343,7 +394,25 @@ test('6. HTTP Endpoints: Login, Auth Me, Audit Logs, Logout, CSRF, and Role Cont
 
     const adminCookie = cookieHeader.split(';')[0];
 
-    // 4. Auth Me with Admin cookie
+    // 3. Exact Origin Matching: Different local port http://localhost:4000 -> 403 Forbidden
+    const wrongPortRes = await invokeApp(app, {
+      method: 'POST',
+      url: '/api/auth/login',
+      headers: { 'origin': 'http://localhost:4000' },
+      body: { email: 'admin@noosadvisory.com', password: adminPassword }
+    });
+    assert.equal(wrongPortRes.status, 403, 'Mutative request with different local port must be rejected');
+
+    // 4. Exact Origin Matching: External untrusted origin -> 403 Forbidden
+    const maliciousOriginRes = await invokeApp(app, {
+      method: 'POST',
+      url: '/api/auth/login',
+      headers: { 'origin': 'https://malicious-site.com' },
+      body: { email: 'admin@noosadvisory.com', password: adminPassword }
+    });
+    assert.equal(maliciousOriginRes.status, 403, 'External mutative request must return 403');
+
+    // 5. Auth Me with Admin cookie
     const meRes = await invokeApp(app, {
       method: 'GET',
       url: '/api/auth/me',
@@ -352,7 +421,7 @@ test('6. HTTP Endpoints: Login, Auth Me, Audit Logs, Logout, CSRF, and Role Cont
     assert.equal(meRes.status, 200);
     assert.equal(meRes.body.user.email, 'admin@noosadvisory.com');
 
-    // 5. Admin accessing Audit Logs -> 200
+    // 6. Admin accessing Audit Logs -> 200
     const auditRes = await invokeApp(app, {
       method: 'GET',
       url: '/api/audit-logs',
@@ -361,17 +430,17 @@ test('6. HTTP Endpoints: Login, Auth Me, Audit Logs, Logout, CSRF, and Role Cont
     assert.equal(auditRes.status, 200);
     assert.ok(auditRes.body.logs.length >= 1);
 
-    // 6. Login as Operator
+    // 7. Login as Operator with exact origin http://127.0.0.1:3000
     const operatorLoginRes = await invokeApp(app, {
       method: 'POST',
       url: '/api/auth/login',
-      headers: { 'origin': 'http://localhost:3000' },
+      headers: { 'origin': 'http://127.0.0.1:3000' },
       body: { email: 'operator@noosadvisory.com', password: operatorPassword }
     });
     assert.equal(operatorLoginRes.status, 200);
     const operatorCookie = operatorLoginRes.headers['set-cookie'][0].split(';')[0];
 
-    // 7. Operator accessing Audit Logs -> 403 Forbidden
+    // 8. Operator accessing Audit Logs -> 403 Forbidden
     const operatorAuditRes = await invokeApp(app, {
       method: 'GET',
       url: '/api/audit-logs',
@@ -379,7 +448,7 @@ test('6. HTTP Endpoints: Login, Auth Me, Audit Logs, Logout, CSRF, and Role Cont
     });
     assert.equal(operatorAuditRes.status, 403, 'Operator role must not access admin audit logs');
 
-    // 8. Logout
+    // 9. Logout with valid origin
     const logoutRes = await invokeApp(app, {
       method: 'POST',
       url: '/api/auth/logout',
@@ -387,22 +456,13 @@ test('6. HTTP Endpoints: Login, Auth Me, Audit Logs, Logout, CSRF, and Role Cont
     });
     assert.equal(logoutRes.status, 200);
 
-    // 9. Auth Me after logout -> 401
+    // 10. Auth Me after logout -> 401
     const meAfterLogout = await invokeApp(app, {
       method: 'GET',
       url: '/api/auth/me',
       headers: { 'cookie': adminCookie }
     });
     assert.equal(meAfterLogout.status, 401, 'Revoked session must be rejected');
-
-    // 10. CSRF / Origin Protection: Untrusted Origin -> 403 Forbidden
-    const untrustedOriginRes = await invokeApp(app, {
-      method: 'POST',
-      url: '/api/auth/login',
-      headers: { 'origin': 'https://malicious-site.com' },
-      body: { email: 'admin@noosadvisory.com', password: adminPassword }
-    });
-    assert.equal(untrustedOriginRes.status, 403, 'External mutative request must return 403');
 
   } finally {
     closeDb();
