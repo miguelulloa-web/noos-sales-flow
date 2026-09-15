@@ -1,0 +1,22 @@
+schema_version: "1.10"
+authority: PROJECT_STATE.yaml
+project_phases: [BOOTSTRAP, DISCOVERY, SOLUTION_DESIGN, PLANNING, DELIVERY, OPERATIONS]
+autonomy_modes: [CONTROLLED]
+project_levels: [A, B, C]
+sponsor_profiles: [FULL, LIMITED, MINIMAL]
+approval_classes: [AUTO, NOTIFY, ASK]
+integration_states: [DETECTED, SELECTED, CONFIGURED, VALIDATED]
+change_states: [REQUESTED, ANALYZING, READY_FOR_IMPLEMENTATION, IMPLEMENTING, PENDING_VALIDATION, VALIDATING, READY_FOR_RELEASE, IN_PRODUCTION, CLOSED, BLOCKED]
+task_packet_states: [DRAFT, READY, AWAITING_APPROVAL, AWAITING_IMPLEMENTATION_APPROVAL, IN_PROGRESS, PENDING_VALIDATION, QA, BLOCKED, DONE]
+quality_states: [NOT_RUN, PASS, PARTIAL, FAIL, BLOCKED, N_A]
+readiness_states: [NOT_READY, READY, BLOCKED]
+required_project_fields: [name, phase, level, autonomy, role, sponsor_profile, sponsor_language]
+required_transition_fields: [previous_phase, exit_criteria, evidence_refs, recorded_at]
+invariants:
+  - phase_transition_requires_exit_evidence
+  - readiness_is_not_phase
+  - detected_is_not_configured
+  - implementation_requires_current_scope_authorization_in_controlled
+  - done_requires_empirical_validation_for_executable_products
+  - qa_and_release_gate_are_separate_runs
+  - dashboard_is_derived

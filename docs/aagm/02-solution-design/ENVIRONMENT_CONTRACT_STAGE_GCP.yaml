@@ -1,0 +1,31 @@
+logical_name: STAGE_GCP
+purpose: "Demostraciones en vivo con clientes potenciales y validación externa en Google Cloud Platform"
+physical_target: "Google Cloud Run (servicio noos-sales-flow-stage en us-central1)"
+protection: PROTECTED
+configuration_source: "GCP Cloud Run Environment Variables & Secret Manager"
+secrets_boundary: "Google Cloud Secret Manager (projects/PROJECT_ID/secrets/GEMINI_API_KEY) vía secretRef. Prohibida API Key en texto plano en la configuración común del servicio."
+data_policy: "Exclusivamente datos sintéticos de demostración"
+status: DEFERRED
+persistence:
+  engine: "Base de Datos Externa Persistente Administrada en GCP (Firestore o Cloud SQL)"
+  state: DEFERRED
+  decision_notes: "Aplazada formalmente por decisión del Sponsor al adoptar Ruta A (MVP Local con SQLite)"
+external_integrations:
+  - name: "Google Gemini API"
+    model_identifier: "gemini-2.5-flash"
+    state: DEFERRED
+  - name: "Google Cloud Secret Manager"
+    state: DEFERRED
+  - name: "Google Cloud Run"
+    state: DEFERRED
+side_effects_allowed: []
+deployment_owner: ORCHESTRATOR_PM
+promotion_from: DEV
+promotion_to: null
+approval_class: ASK
+validation_required:
+  - "Aprobación de nuevo Change para reactivar STAGE_GCP"
+  - "Selección y contrato de persistencia externa Cloud"
+  - "QA independiente PASS y Release Gate formal"
+rollback: "gcloud run services update-traffic noos-sales-flow-stage --to-revisions=PREV=100"
+current_release: null

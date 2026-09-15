@@ -1,0 +1,34 @@
+# Design Benchmark Specification — Noos Sales Flow
+
+- **Referencia y origen:** 
+  - Benchmark: Herramientas modernas B2B de triage y gestión comercial (ej. Linear/HubSpot inbox/Attio) adaptadas a la identidad de NoosAdvisory.
+  - Contexto de demostración: Interfaz orientada a claridad cognitiva, revisión rápida de evidencia y apariencia profesional y moderna (Dark/Light clean tech aesthetic).
+- **Evidencia de investigación/inspección:**
+  - Análisis de flujos de triage comercial en PyMEs B2B: el cuello de botella es la pérdida de contexto entre el texto recibido (email/WhatsApp/formulario) y los campos estructurados requeridos para cotizar.
+  - La inspección de la evidencia textual lado a lado con los campos extraídos reduce drásticamente los errores de asignación.
+- **Modalidad:** `MUST` (criterios de usabilidad y visualización de evidencia obligatorios para validar el MVP).
+- **Jerarquía, whitespace y tipografía:**
+  - *Tipografía:* Sans-serif moderna (Inter / sistema operativo nativo limpio).
+  - *Jerarquía:* Alta visibilidad en estado de solicitud (Pendiente, Asignada, En Revisión, Respondida, Vencida), fechas límites y responsable.
+  - *Whitespace:* Espaciado generoso (8pt grid), tarjetas bien delimitadas con microbordes y contrastes sutiles.
+- **Layout, navegación y responsive flow:**
+  - *Vista principal:* Panel dividido (Split-view o Master-Detail):
+    - Columna/Bandeja: Lista filtrable de solicitudes (Pendientes, Vencidas, Todas).
+    - Detalle central: Solicitud seleccionada mostrando texto original vs. datos estructurados extraídos por IA con resaltado/badge de evidencia.
+    - Barra de acción/Panel lateral: Asignación de responsable, próxima acción, selector de fecha límite y borrador de respuesta generado.
+  - *Formulario de captura rápida:* Modal o vista dedicada para pegar o ingresar una nueva solicitud en texto libre.
+  - *Responsive flow:* Adaptable a desktop y laptop para demostraciones fluidas, con navegación colapsable en pantallas medianas.
+- **Interacciones y product feel:**
+  - Transiciones suaves y feedback inmediato durante el análisis con IA (indicador de carga / skeleton loader).
+  - Campos estructurados editables *in-situ* (inline editing o formulario de revisión directa con validación inmediata).
+  - Acciones claras con un solo clic: "Copiar borrador de respuesta", "Reasignar", "Exportar CSV/JSON".
+  - Manejo visible y elegante de errores (toasts y badges descriptivos ante timeouts o fallas del proveedor de IA).
+- **Mockups/screenshots:** Se formalizarán durante Solution Design / prototipado funcional.
+- **Criterios verificables:**
+  - [CRIT-UX-01] El texto original de la solicitud siempre permanece visible e inmutable como referencia de auditoría (`MUST`).
+  - [CRIT-UX-02] Cada dato estructurado propuesto por la IA muestra su origen/evidencia textual (`MUST`).
+  - [CRIT-UX-03] El usuario puede corregir manualmente cualquier dato estructurado antes de confirmar la solicitud (`MUST`).
+  - [CRIT-UX-04] La bandeja principal clasifica visualmente las solicitudes vencidas y pendientes con alertas claras (`MUST`).
+  - [CRIT-UX-05] El borrador de respuesta comercial es editable y requiere confirmación explícita del usuario (`MUST`).
+- **Design/Brand System baseline relacionada:**
+  - Paleta base NoosAdvisory: Tonos profundos de azul/índigo (`#172033`, `#3157d5`), grises neutrales limpios (`#f5f7fb`, `#eef1f7`), acentos de alerta semánticos (ámbar para pendientes, carmín suave para vencidas, verde esmeralda para completadas).

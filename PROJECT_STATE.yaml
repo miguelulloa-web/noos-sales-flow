@@ -1,0 +1,66 @@
+schema_version: "1.10"
+methodology_version: "1.10"
+project:
+  name: "Noos Sales Flow"
+  phase: SOLUTION_DESIGN
+  health: HEALTHY
+  level: A
+  autonomy: CONTROLLED
+  role: ORCHESTRATOR_PM
+  sponsor_profile: LIMITED
+  sponsor_language: es
+transition:
+  previous_phase: DISCOVERY
+  exit_criteria:
+    - "Design Benchmark Specification documentado con criterios de UX/UI verificables"
+    - "Requisitos funcionales y no funcionales formalizados con modalidad MUST/SHOULD"
+    - "Delimitaciones y exclusiones de alcance de MVP aprobadas"
+    - "Evidencia durable EV-002-discovery registrada"
+  evidence_refs:
+    - "docs/aagm/01-discovery/EV-002-discovery.md"
+  recorded_at: "2026-09-14T22:20:00-03:00"
+readiness:
+  delivery: NOT_READY
+  release: NOT_READY
+integrations:
+  - name: "Google Gemini API (gemini-2.5-flash)"
+    state: SELECTED
+  - name: "SQLite Database Engine (DEV Local)"
+    state: SELECTED
+  - name: "Google Cloud Run"
+    state: DEFERRED
+  - name: "Base de Datos Persistente Externa GCP"
+    state: DEFERRED
+  - name: "Google Cloud Secret Manager"
+    state: DEFERRED
+changes:
+  - id: CHG-001
+    status: ANALYZING
+    owner: ORCHESTRATOR_PM
+environments:
+  - logical_name: DEV
+    physical_target: "http://localhost:3000"
+    version: "v0.1.0-dev (commit b810b11)"
+    protection: UNPROTECTED
+    validation: "Empirical / Unit tests"
+  - logical_name: STAGE_GCP
+    physical_target: "Google Cloud Run"
+    version: null
+    protection: PROTECTED
+    validation: "DEFERRED"
+quality:
+  empirical_validation: NOT_RUN
+  qa: NOT_RUN
+  regression: NOT_RUN
+  release_gate: NOT_EVALUATED
+authorization:
+  implementation_scope: null
+  authorized_by: null
+  authorized_at: null
+  expires_on_scope_change: true
+next_action:
+  sponsor: "Abrir el proyecto desde la nueva ubicación /Users/miguelulloa/Documents/GitHub/noos-sales-flow y ejecutar /aagm-continue para iniciar PLANNING"
+  internal: AWAITING_NEW_WORKSPACE_OPEN
+dashboard:
+  sync_status: SYNCED
+  last_synced_at: "2026-09-14T22:58:00-03:00"

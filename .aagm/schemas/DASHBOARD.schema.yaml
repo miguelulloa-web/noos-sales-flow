@@ -1,0 +1,13 @@
+schema_version: "1.10"
+source: PROJECT_STATE.yaml
+language_source: project.sponsor_language
+required_sections: [project, changes, environments, quality_release, documentation, sponsor_action]
+project_fields: [name, phase, health, role, level, autonomy]
+change_fields: [id, summary, status, owner, environment, blocker, sponsor_action]
+environment_fields: [logical_name, physical_target, version, protection, validation]
+quality_fields: [empirical_validation, qa, regression, release_gate]
+rules:
+  - synchronization_updates_data_not_layout
+  - preserve_valid_state
+  - show_sponsor_action_before_internal_action
+  - use_single_semantic_model

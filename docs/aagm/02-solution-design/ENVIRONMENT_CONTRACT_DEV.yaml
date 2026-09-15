@@ -1,0 +1,32 @@
+logical_name: DEV
+purpose: "Desarrollo local, prototipado y validación empírica independiente del MVP (Ruta A)"
+physical_target: "http://localhost:3000 (Worktree local macOS)"
+protection: UNPROTECTED
+configuration_source: ".env (ignorado en Git) y tabla ai_config"
+secrets_boundary: ".env local (GEMINI_API_KEY) — obligatorio en .gitignore"
+data_policy: "Exclusivamente datos sintéticos / simulados (sin PII de clientes)"
+persistence:
+  engine: "SQLite"
+  target: "data/noos_sales_flow.db (volumen persistente local)"
+  state: SELECTED
+external_integrations:
+  - name: "Google Gemini API"
+    model_identifier: "gemini-2.5-flash"
+    verification_date: "2026-09-14"
+    endpoint: "https://generativelanguage.googleapis.com"
+    structured_outputs: true
+    state: SELECTED
+    validation_rule: "Sujeto a comprobación real de disponibilidad con credencial de desarrollo durante Delivery"
+side_effects_allowed: []
+deployment_owner: DEVELOPER
+promotion_from: null
+promotion_to: null
+approval_class: AUTO
+validation_required:
+  - "Pruebas unitarias de parsing, validación semántica e idempotencia"
+  - "Validación de persistencia tras reinicio forzado del servidor Node.js"
+  - "Validación de autenticación de sesiones y protección de cookies HttpOnly"
+  - "Validación de invalidación de borradores (STALE) ante nueva versión de hechos"
+  - "Validación empírica en navegador en localhost:3000"
+rollback: "git checkout / git revert al commit previo verificado"
+current_release: "v0.1.0-dev"

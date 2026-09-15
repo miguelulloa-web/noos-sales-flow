@@ -1,0 +1,7 @@
+chore(aagm): sponsor approval - <gate-or-scope>
+
+Approval type: <REQUIREMENT | IMPLEMENTATION_SCOPE | RELEASE | PRODUCTION>
+Identifier/scope: <CHG-XXX / TP-XXX / release>
+Sponsor: <human Git author>
+Evidence: <relative path or commit reference>
+Valid until: <scope change or explicit condition>

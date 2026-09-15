@@ -1,0 +1,16 @@
+logical_name: DEV
+purpose: null
+physical_target: null
+protection: null
+configuration_source: null
+secrets_boundary: null
+data_policy: null
+external_integrations: []
+side_effects_allowed: []
+deployment_owner: null
+promotion_from: null
+promotion_to: null
+approval_class: ASK
+validation_required: []
+rollback: null
+current_release: null

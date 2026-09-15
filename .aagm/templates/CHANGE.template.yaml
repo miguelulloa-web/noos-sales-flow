@@ -1,0 +1,21 @@
+id: CHG-XXX
+requirement: null
+modality: MUST
+type: MODIFICATION
+priority: null
+status: REQUESTED
+current_stage: ANALYZING
+owner: ORCHESTRATOR_PM
+decision_refs: []
+impact_analysis_ref: null
+approvals:
+  requirement: null
+  implementation_scope: null
+task_packets: []
+commits_or_prs: []
+evidence: []
+qa_ref: null
+release: null
+environment: null
+production_validation_ref: null
+next_action: null

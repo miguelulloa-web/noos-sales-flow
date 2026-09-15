@@ -1,0 +1,6 @@
+schema_version: "1.10"
+required: [id, requirement, type, priority, status, owner, approvals, task_packets, evidence, release, environment, next_action]
+types: [REQUIREMENT, MODIFICATION, DEFECT, IMPROVEMENT, TECHNICAL, SECURITY, OPERATIONAL]
+modalities: [MUST, SHOULD, GUIDELINE, REFERENCE, OBJECTIVE]
+states: [REQUESTED, ANALYZING, READY_FOR_IMPLEMENTATION, IMPLEMENTING, PENDING_VALIDATION, VALIDATING, READY_FOR_RELEASE, IN_PRODUCTION, CLOSED, BLOCKED]
+traceability_chain: [requirement, decision, impact_analysis, task_packets, commits_or_prs, empirical_evidence, qa, release, environment, production_validation]
