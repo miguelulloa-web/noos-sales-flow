@@ -7,7 +7,7 @@
 - **Candidato de código exacto evaluado**: `779a048` (`fix(auth-db): enforce db triggers, exact origin matching, secure bootstrap and real blackbox tests`)
 - **Línea base previa**: `8f214f5` (commit inicial de TP-01)
 - **Estado**: `PASS`
-- **Rol evaluador**: QA / ORCHESTRATOR_PM
+- **Rol evaluador**: Delivery / ORCHESTRATOR_PM
 
 ---
 
@@ -96,9 +96,9 @@ Resultado: **8 tests pasados, 0 fallos, 0 omitidos**
 
 ---
 
-## 5. Conclusión y Veredicto de QA
+## 5. Conclusión de validación de Delivery
 
 El Task Packet `TP-01` ha subsanado la totalidad de las observaciones de la revisión independiente, acreditando cumplimiento verificable en código, pruebas unitarias, pruebas de integración, pruebas negativas de base de datos y pruebas black-box de proceso real.
 
-Veredicto: **PASS**.  
+Conclusión técnica: **PASS** (Delivery).  
 Recomendación: Restituir formalmente el estado **`DONE`** para `TP-01`.
