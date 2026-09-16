@@ -19,13 +19,15 @@ transition:
   evidence_refs:
     - "docs/aagm/03-planning/EV-004-planning.md"
     - "docs/aagm/04-delivery/evidence/EV-TP-01.md"
-  recorded_at: "2026-09-15T13:15:00-03:00"
+    - "docs/aagm/04-delivery/evidence/EV-TP-02.md"
+  recorded_at: "2026-09-16T11:40:00-03:00"
 readiness:
   delivery: IN_PROGRESS
   release: NOT_READY
 integrations:
   - name: "Google Gemini API (gemini-2.5-flash)"
-    state: SELECTED
+    state: CONFIGURED
+    notes: "Cliente, prompt y validación de esquema completados; prueba empírica real BLOCKED_BY_CREDENTIAL"
   - name: "SQLite Database Engine (DEV Local)"
     state: VALIDATED
   - name: "Google Cloud Run"
@@ -41,27 +43,27 @@ changes:
 environments:
   - logical_name: DEV
     physical_target: "http://localhost:3000"
-    version: "v0.1.0-dev (TP-01 complete & revalidated)"
+    version: "v0.2.0-dev (TP-02 code & mocks complete; real Gemini BLOCKED_BY_CREDENTIAL)"
     protection: UNPROTECTED
-    validation: "Pass (npm test: 8/8 automated tests PASS, unit + black-box)"
+    validation: "Pass (npm test: 17/17 automated tests PASS, TP-01 regression + TP-02 mocks)"
   - logical_name: STAGE_GCP
     physical_target: "Google Cloud Run"
     version: null
     protection: PROTECTED
     validation: "DEFERRED"
 quality:
-  empirical_validation: PASS
+  empirical_validation: BLOCKED_BY_CREDENTIAL
   qa: IN_PROGRESS
   regression: PASS
   release_gate: NOT_EVALUATED
 authorization:
-  implementation_scope: "TP-01 — Fundación, datos, seguridad y acceso (REVALIDADO Y COMPLETADO)"
+  implementation_scope: "TP-02 — Ingesta de Solicitudes, Idempotencia y Motor de Extracción con IA Gemini Real"
   authorized_by: "Sponsor (Miguel Ulloa)"
-  authorized_at: "2026-09-15T12:44:30-03:00"
+  authorized_at: "2026-09-16T11:20:10-03:00"
   expires_on_scope_change: true
 next_action:
-  sponsor: "Revisar evidencia corregida de TP-01 (EV-TP-01.md, commits 8f214f5 y 779a048) y evaluar autorización de TP-02"
-  internal: AWAITING_IMPLEMENTATION_APPROVAL_TP_02
+  sponsor: "Configurar GEMINI_API_KEY en .env local para completar prueba empírica de TP-02 o definir decisión para TP-03"
+  internal: PENDING_VALIDATION_TP_02
 dashboard:
   sync_status: SYNCED
-  last_synced_at: "2026-09-15T13:45:00-03:00"
+  last_synced_at: "2026-09-16T11:40:00-03:00"
