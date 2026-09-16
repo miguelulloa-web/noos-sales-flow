@@ -171,13 +171,13 @@ export function initSchema(db = getDb()) {
       properties: {
         is_commercial: { type: "boolean" },
         confidence_score: { type: "string", enum: ["HIGH", "MEDIUM", "LOW", "NOT_FOUND"] },
-        contact_name: { type: ["string", "null"] },
-        company_name: { type: ["string", "null"] },
-        contact_email: { type: ["string", "null"] },
-        contact_phone: { type: ["string", "null"] },
-        request_type: { type: ["string", "null"], enum: ["QUOTE", "INQUIRY", "DEMO", "OTHER", null] },
+        contact_name: { type: "string", nullable: true },
+        company_name: { type: "string", nullable: true },
+        contact_email: { type: "string", nullable: true },
+        contact_phone: { type: "string", nullable: true },
+        request_type: { type: "string", nullable: true, enum: ["QUOTE", "INQUIRY", "DEMO", "OTHER"] },
         scope_summary: { type: "string" },
-        urgency: { type: ["string", "null"], enum: ["LOW", "MEDIUM", "HIGH", null] },
+        urgency: { type: "string", nullable: true, enum: ["LOW", "MEDIUM", "HIGH"] },
         evidence_snippets: {
           type: "array",
           items: {

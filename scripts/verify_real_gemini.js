@@ -22,7 +22,7 @@ async function main() {
   try {
     const result = await callGeminiApi({
       rawText: syntheticInquiry,
-      modelIdentifier: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+      modelIdentifier: process.env.GEMINI_MODEL || 'gemini-3.6-flash',
       apiKey
     });
 

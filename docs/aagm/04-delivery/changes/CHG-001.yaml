@@ -16,7 +16,7 @@ approvals:
   implementation_scope: "Autorizado por Sponsor exclusivamente para TP-01 (2026-09-15) y TP-02 (2026-09-16)"
 task_packets:
   - TP-01 (DONE)
-  - TP-02 (PENDING_VALIDATION)
+  - TP-02 (DONE)
   - TP-03 (DRAFT)
   - TP-04 (DRAFT)
   - TP-05 (DRAFT)
@@ -24,6 +24,8 @@ commits_or_prs:
   - "8f214f5 (feat: implement TP-01 local foundation, persistence, auth and audit log)"
   - "779a048 (fix(auth-db): enforce db triggers, exact origin matching, secure bootstrap and real blackbox tests)"
   - "7f0282e (docs(evidence): correct EV-TP-01 evaluator role to Delivery and update conclusion heading)"
+  - "8397b15 (feat(leads): implement TP-02 ingestion, idempotency, and Gemini extraction engine)"
+  - "d6ae696 (docs(delivery): register EV-TP-02 and sync project state to PENDING_VALIDATION)"
 evidence:
   - "docs/aagm/02-solution-design/EV-003-solution-design.md"
   - "docs/aagm/03-planning/EV-004-planning.md"
@@ -33,4 +35,4 @@ qa_ref: null
 release: null
 environment: DEV
 production_validation_ref: null
-next_action: "Configurar GEMINI_API_KEY localmente para completar validación empírica de TP-02 y evaluar autorización de TP-03"
+next_action: "Presentar resultados de TP-02 (EV-TP-02.md, PASS con Gemini real) al Sponsor y solicitar autorización formal para TP-03"

@@ -13,7 +13,7 @@ task_packets:
   - id: TP-02
     change_id: CHG-001
     summary: "Ingesta de Solicitudes, Idempotencia y Motor de Extracción con IA Gemini Real"
-    status: PENDING_VALIDATION
+    status: DONE
     owner: DEVELOPER
   - id: TP-03
     change_id: CHG-001

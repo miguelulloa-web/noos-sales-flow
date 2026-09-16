@@ -22,24 +22,29 @@ export const EXTRACTION_JSON_SCHEMA = {
       description: "Nivel de certeza de la extracción basada en la claridad del texto recibido."
     },
     contact_name: {
-      type: ["string", "null"],
+      type: "string",
+      nullable: true,
       description: "Nombre de la persona de contacto, o null si no se menciona explícitamente."
     },
     company_name: {
-      type: ["string", "null"],
+      type: "string",
+      nullable: true,
       description: "Nombre de la empresa o entidad cliente, o null si no se menciona explícitamente."
     },
     contact_email: {
-      type: ["string", "null"],
+      type: "string",
+      nullable: true,
       description: "Correo electrónico del contacto, o null si no se menciona."
     },
     contact_phone: {
-      type: ["string", "null"],
+      type: "string",
+      nullable: true,
       description: "Teléfono del contacto, o null si no se menciona."
     },
     request_type: {
-      type: ["string", "null"],
-      enum: ["QUOTE", "INQUIRY", "DEMO", "OTHER", null],
+      type: "string",
+      nullable: true,
+      enum: ["QUOTE", "INQUIRY", "DEMO", "OTHER"],
       description: "Tipo de requerimiento: cotización, consulta técnica, demo u otro."
     },
     scope_summary: {
@@ -47,8 +52,9 @@ export const EXTRACTION_JSON_SCHEMA = {
       description: "Resumen sucinto del alcance solicitado, o descripción del contenido recibido."
     },
     urgency: {
-      type: ["string", "null"],
-      enum: ["LOW", "MEDIUM", "HIGH", null],
+      type: "string",
+      nullable: true,
+      enum: ["LOW", "MEDIUM", "HIGH"],
       description: "Nivel de urgencia deducible de plazos o fechas explícitas, o null si no hay urgencia señalada."
     },
     evidence_snippets: {
@@ -180,7 +186,7 @@ export async function callGeminiApi({
   timeoutMs = 15000,
   fetchFn = fetch
 }) {
-  const model = modelIdentifier || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  const model = modelIdentifier || process.env.GEMINI_MODEL || 'gemini-3.6-flash';
   const key = apiKey || process.env.GEMINI_API_KEY || (fetchFn !== fetch ? 'mock_test_key' : null);
 
   if (!key) {

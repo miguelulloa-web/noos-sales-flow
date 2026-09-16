@@ -25,9 +25,9 @@ readiness:
   delivery: IN_PROGRESS
   release: NOT_READY
 integrations:
-  - name: "Google Gemini API (gemini-2.5-flash)"
-    state: CONFIGURED
-    notes: "Cliente, prompt y validación de esquema completados; prueba empírica real BLOCKED_BY_CREDENTIAL"
+  - name: "Google Gemini API (gemini-3.6-flash)"
+    state: VALIDATED
+    notes: "Invocación empírica real PASS (latencia 6111ms, 5 citas verificadas con substring verification)"
   - name: "SQLite Database Engine (DEV Local)"
     state: VALIDATED
   - name: "Google Cloud Run"
@@ -43,27 +43,27 @@ changes:
 environments:
   - logical_name: DEV
     physical_target: "http://localhost:3000"
-    version: "v0.2.0-dev (TP-02 code & mocks complete; real Gemini BLOCKED_BY_CREDENTIAL)"
+    version: "v0.2.0-dev (TP-02 complete & empirically validated with Gemini real)"
     protection: UNPROTECTED
-    validation: "Pass (npm test: 17/17 automated tests PASS, TP-01 regression + TP-02 mocks)"
+    validation: "Pass (npm test: 17/17 tests PASS, unit + mocks + real empirical Gemini PASS)"
   - logical_name: STAGE_GCP
     physical_target: "Google Cloud Run"
     version: null
     protection: PROTECTED
     validation: "DEFERRED"
 quality:
-  empirical_validation: BLOCKED_BY_CREDENTIAL
+  empirical_validation: PASS
   qa: IN_PROGRESS
   regression: PASS
   release_gate: NOT_EVALUATED
 authorization:
-  implementation_scope: "TP-02 — Ingesta de Solicitudes, Idempotencia y Motor de Extracción con IA Gemini Real"
+  implementation_scope: "TP-02 — Ingesta de Solicitudes, Idempotencia y Motor de Extracción con IA Gemini Real (COMPLETADO Y VALIDADO)"
   authorized_by: "Sponsor (Miguel Ulloa)"
   authorized_at: "2026-09-16T11:20:10-03:00"
   expires_on_scope_change: true
 next_action:
-  sponsor: "Configurar GEMINI_API_KEY en .env local para completar prueba empírica de TP-02 o definir decisión para TP-03"
-  internal: PENDING_VALIDATION_TP_02
+  sponsor: "Revisar evidencia durable de TP-02 (EV-TP-02.md, PASS con Gemini real) y evaluar autorización para TP-03"
+  internal: AWAITING_IMPLEMENTATION_APPROVAL_TP_03
 dashboard:
   sync_status: SYNCED
-  last_synced_at: "2026-09-16T11:40:00-03:00"
+  last_synced_at: "2026-09-16T13:20:00-03:00"
