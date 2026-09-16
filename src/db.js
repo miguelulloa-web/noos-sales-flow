@@ -83,10 +83,71 @@ export function initSchema(db = getDb()) {
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS leads (
+      id TEXT PRIMARY KEY,
+      idempotency_key TEXT UNIQUE NOT NULL,
+      text_hash TEXT NOT NULL,
+      raw_text TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'MANUAL',
+      status TEXT NOT NULL DEFAULT 'CAPTURED' CHECK(status IN ('CAPTURED', 'ANALYZED', 'TRIAGED', 'ACTIONABLE', 'DISCARDED')),
+      is_possible_duplicate INTEGER NOT NULL DEFAULT 0,
+      duplicate_of_lead_id TEXT,
+      sender_name TEXT,
+      sender_email TEXT,
+      company_name TEXT,
+      created_by_user_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (duplicate_of_lead_id) REFERENCES leads(id) ON DELETE SET NULL,
+      FOREIGN KEY (created_by_user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS lead_extractions (
+      id TEXT PRIMARY KEY,
+      lead_id TEXT NOT NULL,
+      model_identifier TEXT NOT NULL,
+      prompt_version TEXT NOT NULL,
+      schema_version TEXT NOT NULL,
+      raw_response_json TEXT,
+      structured_output_json TEXT,
+      is_commercial INTEGER NOT NULL DEFAULT 1,
+      confidence_score TEXT NOT NULL CHECK(confidence_score IN ('HIGH', 'MEDIUM', 'LOW', 'NOT_FOUND')),
+      request_type TEXT,
+      scope_summary TEXT,
+      urgency TEXT,
+      suggested_response_draft TEXT,
+      latency_ms INTEGER NOT NULL DEFAULT 0,
+      retry_count INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL CHECK(status IN ('SUCCESS', 'FAILED', 'VALIDATION_ERROR', 'QUOTA_EXCEEDED', 'TIMEOUT')),
+      error_message TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS lead_evidence (
+      id TEXT PRIMARY KEY,
+      lead_id TEXT NOT NULL,
+      extraction_id TEXT NOT NULL,
+      field_name TEXT NOT NULL,
+      verbatim_quote TEXT NOT NULL,
+      char_start INTEGER,
+      char_end INTEGER,
+      is_verified INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE,
+      FOREIGN KEY (extraction_id) REFERENCES lead_extractions(id) ON DELETE CASCADE
+    );
+
     CREATE INDEX IF NOT EXISTS idx_sessions_token_hash ON auth_sessions(session_token_hash);
     CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON auth_sessions(user_id);
     CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log(entity_type, entity_id);
     CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_leads_idempotency_key ON leads(idempotency_key);
+    CREATE INDEX IF NOT EXISTS idx_leads_text_hash ON leads(text_hash);
+    CREATE INDEX IF NOT EXISTS idx_leads_sender_email ON leads(sender_email);
+    CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
+    CREATE INDEX IF NOT EXISTS idx_extractions_lead_id ON lead_extractions(lead_id);
+    CREATE INDEX IF NOT EXISTS idx_evidence_extraction ON lead_evidence(extraction_id);
 
     -- Enforce append-only integrity at SQLite engine level: forbid UPDATE and DELETE
     CREATE TRIGGER IF NOT EXISTS prevent_audit_log_update
@@ -108,13 +169,15 @@ export function initSchema(db = getDb()) {
     const defaultSchema = JSON.stringify({
       type: "object",
       properties: {
-        contact_name: { type: "string" },
-        company_name: { type: "string" },
-        contact_email: { type: "string" },
-        contact_phone: { type: "string" },
-        request_type: { type: "string", enum: ["QUOTE", "INQUIRY", "DEMO", "OTHER"] },
+        is_commercial: { type: "boolean" },
+        confidence_score: { type: "string", enum: ["HIGH", "MEDIUM", "LOW", "NOT_FOUND"] },
+        contact_name: { type: ["string", "null"] },
+        company_name: { type: ["string", "null"] },
+        contact_email: { type: ["string", "null"] },
+        contact_phone: { type: ["string", "null"] },
+        request_type: { type: ["string", "null"], enum: ["QUOTE", "INQUIRY", "DEMO", "OTHER", null] },
         scope_summary: { type: "string" },
-        urgency: { type: "string", enum: ["LOW", "MEDIUM", "HIGH"] },
+        urgency: { type: ["string", "null"], enum: ["LOW", "MEDIUM", "HIGH", null] },
         evidence_snippets: {
           type: "array",
           items: {
@@ -128,7 +191,7 @@ export function initSchema(db = getDb()) {
         },
         suggested_response_draft: { type: "string" }
       },
-      required: ["request_type", "scope_summary", "urgency", "evidence_snippets", "suggested_response_draft"]
+      required: ["is_commercial", "confidence_score", "scope_summary", "evidence_snippets", "suggested_response_draft"]
     });
 
     db.prepare(`
@@ -138,7 +201,7 @@ export function initSchema(db = getDb()) {
       crypto.randomUUID(),
       'LEAD_EXTRACTION_CONFIG',
       'gemini-2.5-flash',
-      'Clasifica la solicitud comercial y extrae datos estructurados con citas de evidencia exactas.',
+      'Clasifica la solicitud comercial y extrae datos estructurados con citas de evidencia exactas y verificación estricta de hechos.',
       defaultSchema,
       '1.0.0',
       new Date().toISOString()
@@ -260,3 +323,210 @@ export function getActiveAiConfig(configKey = 'LEAD_EXTRACTION_CONFIG', db = get
     SELECT * FROM ai_config WHERE config_key = ? AND is_active = 1
   `).get(configKey) || null;
 }
+
+// Leads repository functions
+export function createLead({
+  id = crypto.randomUUID(),
+  idempotencyKey,
+  textHash,
+  rawText,
+  source = 'MANUAL',
+  status = 'CAPTURED',
+  isPossibleDuplicate = 0,
+  duplicateOfLeadId = null,
+  senderName = null,
+  senderEmail = null,
+  companyName = null,
+  createdByUserId
+}, db = getDb()) {
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO leads (
+      id, idempotency_key, text_hash, raw_text, source, status,
+      is_possible_duplicate, duplicate_of_lead_id, sender_name, sender_email,
+      company_name, created_by_user_id, created_at, updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id, idempotencyKey, textHash, rawText, source, status,
+    isPossibleDuplicate ? 1 : 0, duplicateOfLeadId, senderName,
+    senderEmail ? senderEmail.toLowerCase().trim() : null,
+    companyName, createdByUserId, now, now
+  );
+  return getLeadById(id, db);
+}
+
+export function getLeadById(id, db = getDb()) {
+  return db.prepare('SELECT * FROM leads WHERE id = ?').get(id) || null;
+}
+
+export function getLeadByIdempotencyKey(key, db = getDb()) {
+  if (!key) return null;
+  return db.prepare('SELECT * FROM leads WHERE idempotency_key = ?').get(key) || null;
+}
+
+export function findPossibleDuplicateLead({ textHash, senderEmail, excludeId = null }, db = getDb()) {
+  let query = 'SELECT * FROM leads WHERE (text_hash = ?';
+  const params = [textHash];
+
+  if (senderEmail) {
+    query += ' OR sender_email = ?';
+    params.push(senderEmail.toLowerCase().trim());
+  }
+  query += ')';
+
+  if (excludeId) {
+    query += ' AND id != ?';
+    params.push(excludeId);
+  }
+
+  query += ' ORDER BY created_at DESC LIMIT 1';
+  return db.prepare(query).get(...params) || null;
+}
+
+export function updateLead(id, updates = {}, db = getDb()) {
+  const allowedFields = [
+    'status', 'is_possible_duplicate', 'duplicate_of_lead_id',
+    'sender_name', 'sender_email', 'company_name'
+  ];
+  const setClauses = [];
+  const params = [];
+
+  for (const field of allowedFields) {
+    if (field in updates) {
+      setClauses.push(`${field} = ?`);
+      params.push(updates[field]);
+    }
+  }
+
+  if (setClauses.length === 0) {
+    return getLeadById(id, db);
+  }
+
+  const now = new Date().toISOString();
+  setClauses.push('updated_at = ?');
+  params.push(now);
+  params.push(id);
+
+  db.prepare(`UPDATE leads SET ${setClauses.join(', ')} WHERE id = ?`).run(...params);
+  return getLeadById(id, db);
+}
+
+export function listLeads({ limit = 50, offset = 0, status = null } = {}, db = getDb()) {
+  let query = 'SELECT * FROM leads';
+  const params = [];
+
+  if (status) {
+    query += ' WHERE status = ?';
+    params.push(status);
+  }
+
+  query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+  params.push(limit, offset);
+
+  return db.prepare(query).all(...params);
+}
+
+// Lead Extractions repository functions
+export function createLeadExtraction({
+  id = crypto.randomUUID(),
+  leadId,
+  modelIdentifier,
+  promptVersion = '1.0.0',
+  schemaVersion = '1.0.0',
+  rawResponseJson = null,
+  structuredOutputJson = null,
+  isCommercial = 1,
+  confidenceScore = 'HIGH',
+  requestType = null,
+  scopeSummary = null,
+  urgency = null,
+  suggestedResponseDraft = null,
+  latencyMs = 0,
+  retryCount = 0,
+  status = 'SUCCESS',
+  errorMessage = null
+}, db = getDb()) {
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO lead_extractions (
+      id, lead_id, model_identifier, prompt_version, schema_version,
+      raw_response_json, structured_output_json, is_commercial, confidence_score,
+      request_type, scope_summary, urgency, suggested_response_draft,
+      latency_ms, retry_count, status, error_message, created_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id, leadId, modelIdentifier, promptVersion, schemaVersion,
+    rawResponseJson, structuredOutputJson, isCommercial ? 1 : 0, confidenceScore,
+    requestType, scopeSummary, urgency, suggestedResponseDraft,
+    latencyMs, retryCount, status, errorMessage, now
+  );
+
+  return getExtractionById(id, db);
+}
+
+export function getExtractionById(id, db = getDb()) {
+  return db.prepare('SELECT * FROM lead_extractions WHERE id = ?').get(id) || null;
+}
+
+export function getLatestExtractionByLeadId(leadId, db = getDb()) {
+  return db.prepare(`
+    SELECT * FROM lead_extractions
+    WHERE lead_id = ?
+    ORDER BY created_at DESC LIMIT 1
+  `).get(leadId) || null;
+}
+
+// Lead Evidence repository functions
+export function createLeadEvidenceBatch(evidenceItems = [], db = getDb()) {
+  if (!evidenceItems || evidenceItems.length === 0) return [];
+
+  const stmt = db.prepare(`
+    INSERT INTO lead_evidence (
+      id, lead_id, extraction_id, field_name, verbatim_quote,
+      char_start, char_end, is_verified, created_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const now = new Date().toISOString();
+  const created = [];
+
+  for (const item of evidenceItems) {
+    const id = item.id || crypto.randomUUID();
+    stmt.run(
+      id,
+      item.leadId,
+      item.extractionId,
+      item.fieldName,
+      item.verbatimQuote,
+      item.charStart ?? null,
+      item.charEnd ?? null,
+      item.isVerified ? 1 : 0,
+      now
+    );
+    created.push({
+      id,
+      lead_id: item.leadId,
+      extraction_id: item.extractionId,
+      field_name: item.fieldName,
+      verbatim_quote: item.verbatimQuote,
+      char_start: item.charStart ?? null,
+      char_end: item.charEnd ?? null,
+      is_verified: item.isVerified ? 1 : 0,
+      created_at: now
+    });
+  }
+
+  return created;
+}
+
+export function getEvidenceByExtractionId(extractionId, db = getDb()) {
+  return db.prepare('SELECT * FROM lead_evidence WHERE extraction_id = ? ORDER BY created_at ASC').all(extractionId);
+}
+
+export function getEvidenceByLeadId(leadId, db = getDb()) {
+  return db.prepare('SELECT * FROM lead_evidence WHERE lead_id = ? ORDER BY created_at ASC').all(leadId);
+}
+
