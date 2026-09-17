@@ -176,6 +176,33 @@ export function validateAndSanitizeExtraction(rawText, parsed) {
   };
 }
 
+export const AUTHORIZED_DEFAULT_MODEL = 'gemini-3.6-flash';
+
+/**
+ * Resolves the effective Gemini model following the documented precedence:
+ * 1. Explicit parameter (modelIdentifier passed)
+ * 2. Active configuration in DB (ai_config.model_identifier)
+ * 3. Environment variable (process.env.GEMINI_MODEL)
+ * 4. Authorized default model ('gemini-3.6-flash')
+ */
+export function resolveEffectiveModel(modelIdentifier = null, db = null) {
+  if (modelIdentifier && typeof modelIdentifier === 'string' && modelIdentifier.trim()) {
+    return modelIdentifier.trim();
+  }
+  if (db) {
+    try {
+      const activeConfig = getActiveAiConfig('LEAD_EXTRACTION_CONFIG', db);
+      if (activeConfig && activeConfig.model_identifier && activeConfig.model_identifier.trim()) {
+        return activeConfig.model_identifier.trim();
+      }
+    } catch {}
+  }
+  if (process.env.GEMINI_MODEL && process.env.GEMINI_MODEL.trim()) {
+    return process.env.GEMINI_MODEL.trim();
+  }
+  return AUTHORIZED_DEFAULT_MODEL;
+}
+
 /**
  * Invokes Google Gemini API with Structured Outputs or custom fetcher for testing.
  */
@@ -183,15 +210,17 @@ export async function callGeminiApi({
   rawText,
   modelIdentifier = null,
   apiKey = null,
-  timeoutMs = 15000,
-  fetchFn = fetch
+  timeoutMs = 25000,
+  fetchFn = fetch,
+  db = null
 }) {
-  const model = modelIdentifier || process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+  const model = resolveEffectiveModel(modelIdentifier, db);
   const key = apiKey || process.env.GEMINI_API_KEY || (fetchFn !== fetch ? 'mock_test_key' : null);
 
   if (!key) {
     const err = new Error('GEMINI_API_KEY no está disponible en las variables de entorno locales');
     err.code = 'BLOCKED_BY_CREDENTIAL';
+    err.modelIdentifier = model;
     throw err;
   }
 
@@ -199,6 +228,7 @@ export async function callGeminiApi({
   if (model.includes('latest')) {
     const err = new Error(`El identificador de modelo '${model}' no está permitido; debe especificarse una versión exacta sin alias 'latest'`);
     err.code = 'INVALID_MODEL_IDENTIFIER';
+    err.modelIdentifier = model;
     throw err;
   }
 
@@ -233,78 +263,98 @@ export async function callGeminiApi({
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   const startTime = Date.now();
-  try {
-    const res = await fetchFn(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload),
-      signal: controller.signal
-    });
+  let retries = 0;
+  const maxRetries = 2;
 
-    clearTimeout(timer);
-    const latencyMs = Date.now() - startTime;
+  while (true) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-    if (res.status === 429) {
-      const err = new Error('Cuota agotada en Google Gemini API (HTTP 429 Too Many Requests)');
-      err.code = 'QUOTA_EXCEEDED';
-      err.latencyMs = latencyMs;
-      throw err;
-    }
-
-    if (!res.ok) {
-      const errorText = await res.text().catch(() => '');
-      const err = new Error(`Fallo en invocación a Gemini API (HTTP ${res.status}): ${errorText}`);
-      err.code = 'API_ERROR';
-      err.status = res.status;
-      err.latencyMs = latencyMs;
-      throw err;
-    }
-
-    const jsonResponse = await res.json();
-    const candidateText = jsonResponse?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!candidateText) {
-      const err = new Error('La respuesta de Gemini API no contiene candidatos válidos con texto JSON');
-      err.code = 'EMPTY_RESPONSE';
-      err.latencyMs = latencyMs;
-      throw err;
-    }
-
-    let parsed;
     try {
-      parsed = JSON.parse(candidateText);
-    } catch (parseErr) {
-      const err = new Error(`Error al parsear el JSON estructurado devuelto por Gemini: ${parseErr.message}`);
-      err.code = 'JSON_PARSE_ERROR';
-      err.latencyMs = latencyMs;
-      throw err;
-    }
+      const res = await fetchFn(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
 
-    return {
-      modelIdentifier: model,
-      promptVersion: '1.0.0',
-      schemaVersion: '1.0.0',
-      rawResponseJson: JSON.stringify(jsonResponse),
-      structuredOutputJson: JSON.stringify(parsed),
-      parsedOutput: parsed,
-      latencyMs,
-      retryCount: 0
-    };
-  } catch (error) {
-    clearTimeout(timer);
-    const latencyMs = Date.now() - startTime;
-    if (error.name === 'AbortError') {
-      const timeoutErr = new Error(`Tiempo de espera agotado al invocar Gemini API (${timeoutMs}ms)`);
-      timeoutErr.code = 'TIMEOUT';
-      timeoutErr.latencyMs = latencyMs;
-      throw timeoutErr;
+      clearTimeout(timer);
+      const latencyMs = Date.now() - startTime;
+
+      if (res.status === 503 && retries < maxRetries) {
+        retries++;
+        await new Promise(r => setTimeout(r, 1500 * retries));
+        continue;
+      }
+
+      if (res.status === 429) {
+        const err = new Error('Cuota agotada en Google Gemini API (HTTP 429 Too Many Requests)');
+        err.code = 'QUOTA_EXCEEDED';
+        err.latencyMs = latencyMs;
+        err.retryCount = retries;
+        throw err;
+      }
+
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => '');
+        const err = new Error(`Fallo en invocación a Gemini API (HTTP ${res.status}): ${errorText}`);
+        err.code = 'API_ERROR';
+        err.status = res.status;
+        err.latencyMs = latencyMs;
+        err.retryCount = retries;
+        throw err;
+      }
+
+      const jsonResponse = await res.json();
+      const candidateText = jsonResponse?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+      if (!candidateText) {
+        const err = new Error('La respuesta de Gemini API no contiene candidatos válidos con texto JSON');
+        err.code = 'EMPTY_RESPONSE';
+        err.latencyMs = latencyMs;
+        err.retryCount = retries;
+        throw err;
+      }
+
+      let parsed;
+      try {
+        parsed = JSON.parse(candidateText);
+      } catch (parseErr) {
+        const err = new Error(`Error al parsear el JSON estructurado devuelto por Gemini: ${parseErr.message}`);
+        err.code = 'JSON_PARSE_ERROR';
+        err.latencyMs = latencyMs;
+        err.retryCount = retries;
+        throw err;
+      }
+
+      return {
+        modelIdentifier: model,
+        promptVersion: '1.0.0',
+        schemaVersion: '1.0.0',
+        rawResponseJson: JSON.stringify(jsonResponse),
+        structuredOutputJson: JSON.stringify(parsed),
+        parsedOutput: parsed,
+        latencyMs,
+        retryCount: retries
+      };
+    } catch (error) {
+      clearTimeout(timer);
+      const latencyMs = Date.now() - startTime;
+      if (error.name === 'AbortError') {
+        const timeoutErr = new Error(`Tiempo de espera agotado al invocar Gemini API (${timeoutMs}ms)`);
+        timeoutErr.code = 'TIMEOUT';
+        timeoutErr.latencyMs = latencyMs;
+        timeoutErr.retryCount = retries;
+        throw timeoutErr;
+      }
+      if (!error.latencyMs) {
+        error.latencyMs = latencyMs;
+      }
+      error.retryCount = retries;
+      throw error;
     }
-    if (!error.latencyMs) {
-      error.latencyMs = latencyMs;
-    }
-    throw error;
   }
 }
 
@@ -315,19 +365,19 @@ export async function extractLeadData({
   rawText,
   apiKey = null,
   modelIdentifier = null,
-  timeoutMs = 15000,
+  timeoutMs = 25000,
   fetchFn = fetch,
   db = null
 }) {
-  const aiConfig = db ? getActiveAiConfig('LEAD_EXTRACTION_CONFIG', db) : null;
-  const model = modelIdentifier || aiConfig?.model_identifier || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  const model = resolveEffectiveModel(modelIdentifier, db);
 
   const extractionResult = await callGeminiApi({
     rawText,
     modelIdentifier: model,
     apiKey,
     timeoutMs,
-    fetchFn
+    fetchFn,
+    db
   });
 
   const sanitized = validateAndSanitizeExtraction(rawText, extractionResult.parsedOutput);

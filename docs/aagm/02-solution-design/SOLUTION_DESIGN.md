@@ -16,7 +16,7 @@ Por decisión formal del Sponsor, se adopta la **Ruta A**:
 |---|---|---|---|---|
 | **DEC-01** | Alcance de Despliegue: MVP Funcional en DEV Local (Ruta A) | `MUST` | El MVP se desarrollará y validará exclusivamente en DEV local (`http://localhost:3000`). Se aplaza Google Cloud Run (`STAGE_GCP: DEFERRED`). Firestore, Cloud SQL y Google Secret Manager quedan `DEFERRED` sin implementarse en esta etapa. | TP-01, TP-04 |
 | **DEC-02** | Persistencia: SQLite Transaccional Local | `MUST` | Base de datos persistente en disco local (`data/noos_sales_flow.db`), con integridad referencial, transacciones seguras y persistencia 100% garantizada ante reinicios del proceso servidor. Estado: `SELECTED`. | TP-01, TP-04 |
-| **DEC-03** | Motor de IA: Google Gemini API con `gemini-2.5-flash` Configurable | `MUST` | Modelo estable verificado al 2026-09-14. Configurable vía variables de entorno / `ai_config` (sin alias `latest` en aceptación). Sujeto a comprobación real de disponibilidad con credencial de desarrollo en Delivery. Estado: `SELECTED`. | TP-02, TP-03 |
+| **DEC-03** | Motor de IA: Google Gemini API con `gemini-3.6-flash` Configurable | `MUST` | Modelo base inicial propuesto: `gemini-2.5-flash` (2026-09-14). Durante Delivery empírico, la API de Google reportó restricción para nuevos usuarios en ese identificador y recomendó `gemini-3.6-flash`. El Sponsor autorizó formalmente la sustitución a `gemini-3.6-flash` el 2026-09-16, con precedencia: 1) parámetro explícito, 2) `ai_config` en BD, 3) `GEMINI_MODEL` en entorno, 4) `gemini-3.6-flash` por defecto (sin alias `latest`). Estado: `VALIDATED`. | TP-02, TP-03 |
 | **DEC-04** | Structured Outputs: Cumplimiento de Esquema, NO Determinismo | `MUST` | La IA garantiza apego sintáctico al JSON Schema. El backend ejecuta validación semántica, verificación de subcadenas de citas de evidencia en el texto original, soporte de valores ausentes, registro de incertidumbre y revisión humana obligatoria. | TP-02, TP-03 |
 | **DEC-05** | Autenticación Local y Sesiones en Servidor | `MUST` | Almacenamiento de credenciales con hashing seguro `bcrypt` + salt en `users.password_hash`. Sesiones persistidas en `auth_sessions` con token criptográfico aleatorio y expiración. Cookies con flags `HttpOnly`, `SameSite=Lax`, `Path=/`, `Max-Age=86400`. Middleware en servidor para autorización según roles `ADMIN` y `OPERATOR/DEMO_USER`. Endpoints `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`. | TP-01 |
 | **DEC-06** | Idempotencia y Detección de Duplicados | `MUST` | Cada solicitud entrante genera/recibe un `idempotency_key`. Un reintento exacto dentro de la ventana de 24h retorna el lead existente (HTTP 200 con header `X-Idempotent-Replay: true`). Un posible duplicado (mismo remitente o texto idéntico fuera de ventana) se etiqueta con `is_possible_duplicate: true` para triage y resolución humana sin pérdida de datos. | TP-02 |
@@ -53,7 +53,7 @@ Por decisión formal del Sponsor, se adopta la **Ruta A**:
 ┌────────────────────────────────────────┐   ┌───────────────────────────┐
 │ Backend Local (Node.js / Express)      │   │ Motor de IA Externo       │
 │                                        │   │ (Google Gemini API)       │
-│ - Autenticación (bcrypt + sessions)    │──▶│ - Modelo: gemini-2.5-flash│
+│ - Autenticación (bcrypt + sessions)    │──▶│ - Modelo: gemini-3.6-flash│
 │ - Control de idempotencia y duplicados │   │ - Structured Outputs      │
 │ - Validación semántica de esquemas     │   │ - Prompt y JSON Schema    │
 │ - Lógica de hechos confirmados y STALE │   │ - Credencial vía .env     │

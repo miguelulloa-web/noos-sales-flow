@@ -46,30 +46,31 @@ Conforme al Task Packet `TP-02` y la autorización formal del Sponsor, se implem
 ## 2. Resultados de Pruebas Automatizadas
 
 Comando: `npm test` (`node --test tests/*.test.js`)  
-Resultado: **17 pruebas ejecutadas, 17 pasadas, 0 fallos, 0 omitidas** (100% PASS)
+Resultado: **18 pruebas ejecutadas, 18 pasadas, 0 fallos, 0 omitidas** (100% PASS)
 
 ```text
-✔ 1. Database schema initialization, indices, and default AI config (11.59ms)
-✔ 2. Password hashing with bcrypt and user creation (265.94ms)
-✔ 3. Session token hashing, retrieval, expiration, and revocation (11.00ms)
-✔ 4. Append-only Audit Log verification and SQLite database triggers protection (10.84ms)
-✔ 5. Bootstrap script: seeds users securely without leaking passwords or tokens to logs (232.39ms)
-✔ 6. Local persistence across database reconnects (reinicio simulado) (12.56ms)
-✔ 7. HTTP Endpoints: Login, Auth Me, Audit Logs, Logout, Exact Origin Matching, and Role Control (343.60ms)
-✔ Black-box Real Server Lifecycle: independent processes, real HTTP, CSRF, and post-restart persistence (609.91ms)
-✔ TP-02: 1. Substring verification and factuality logic in extraction module (0.64ms)
-✔ TP-02: 2. Ingesta de Solicitud Clara con Mock de Gemini API (52.33ms)
-✔ TP-02: 3. Solicitud con Empresa Ausente (no se inventa) (14.85ms)
-✔ TP-02: 4. Texto ambiguo y texto no comercial (11.17ms)
-✔ TP-02: 5. Idempotencia estricta (reintento exacto responde X-Idempotent-Replay y no re-invoca IA) (14.12ms)
-✔ TP-02: 6. Posible duplicado (se marca y relaciona, pero NUNCA se fusiona automáticamente) (18.28ms)
-✔ TP-02: 7. Tratamiento de texto como contenido no confiable (resistencia a Prompt Injection) (12.95ms)
-✔ TP-02: 8. Resiliencia ante fallos de Gemini (timeout, cuota 429, error de API y citas inválidas) (25.84ms)
-✔ TP-02: 9. Validación de payload y límites de tamaño (23.744ms)
+✔ 1. Database schema initialization, indices, and default AI config (17.29ms)
+✔ 2. Password hashing with bcrypt and user creation (249.90ms)
+✔ 3. Session token hashing, retrieval, expiration, and revocation (10.34ms)
+✔ 4. Append-only Audit Log verification and SQLite database triggers protection (9.33ms)
+✔ 5. Bootstrap script: seeds users securely without leaking passwords or tokens to logs (299.99ms)
+✔ 6. Local persistence across database reconnects (reinicio simulado) (14.16ms)
+✔ 7. HTTP Endpoints: Login, Auth Me, Audit Logs, Logout, Exact Origin Matching, and Role Control (448.32ms)
+✔ Black-box Real Server Lifecycle: independent processes, real HTTP, CSRF, and post-restart persistence (870.29ms)
+✔ TP-02: 1. Substring verification and factuality logic in extraction module (0.99ms)
+✔ TP-02: 2. Ingesta de Solicitud Clara con Mock de Gemini API (115.97ms)
+✔ TP-02: 3. Solicitud con Empresa Ausente (no se inventa) (17.55ms)
+✔ TP-02: 4. Texto ambiguo y texto no comercial (16.01ms)
+✔ TP-02: 5. Idempotencia estricta (reintento exacto responde X-Idempotent-Replay y no re-invoca IA) (19.41ms)
+✔ TP-02: 6. Posible duplicado (se marca y relaciona, pero NUNCA se fusiona automáticamente) (19.43ms)
+✔ TP-02: 7. Tratamiento de texto como contenido no confiable (resistencia a Prompt Injection) (14.91ms)
+✔ TP-02: 8. Resiliencia ante fallos de Gemini (timeout, cuota 429, error de API y citas inválidas) (20.13ms)
+✔ TP-02: 9. Validación de payload y límites de tamaño (14.06ms)
+✔ TP-02: 10. Consistencia de Modelo Autorizado y Jerarquía de Precedencia (gemini-3.6-flash) (17.99ms)
 
-ℹ tests 17
+ℹ tests 18
 ℹ suites 0
-ℹ pass 17
+ℹ pass 18
 ℹ fail 0
 ```
 
@@ -77,65 +78,90 @@ Resultado: **17 pruebas ejecutadas, 17 pasadas, 0 fallos, 0 omitidas** (100% PAS
 
 ## 3. Resultado de la Invocación Real con Google Gemini API
 
-Comando de verificación: `node scripts/verify_real_gemini.js`  
-Solicitud sintética nueva utilizada:
-*"Hola equipo de NoosAdvisory, mi nombre es Fernando Morales de Retail Austral S.A. (f.morales@retailaustral.cl). Requerimos cotización formal para consultoría de optimización comercial y triage de solicitudes. Favor contactar esta semana."*
+La validación empírica real de TP-02 se ejecutó en dos niveles complementarios:
+1. **Validación aislada de integración de cliente Gemini (`callGeminiApi`)**: probada inicialmente con solicitud sintética ("Retail Austral S.A.").
+2. **Validación integral a través de la ruta de aplicación (`POST /api/leads`)**: ejecutada sobre la aplicación completa (Express + SQLite transaccional + CSRF + middleware de autenticación + Gemini API real `gemini-3.6-flash` + persistencia en tablas `leads`, `lead_extractions` y `lead_evidence` + reintento de idempotencia).
 
-Credencial: Configurada en `.env` local (no guardada en Git, no filtrada).  
-Resultado empírico obtenido:
+Comando de verificación integral: `node scripts/verify_real_gemini.js`  
+Solicitud sintética utilizada:
+*"Hola equipo NoosAdvisory, soy Gabriela Montes de Inversiones Biobío S.A. (g.montes@inversionesbiobio.cl). Requerimos propuesta comercial para diagnóstico estratégico de procesos de ventas B2B. Urgencia media, coordinar reunión la próxima semana."*
+
+Credencial: Configurada en `.env` local (`GEMINI_API_KEY`, no guardada en Git, no filtrada ni expuesta).  
+Resultado empírico obtenido en vivo:
 
 ```json
 {
   "status": "PASS",
-  "model": "gemini-3.6-flash",
-  "latency_ms": 6111,
+  "validation_mode": "INTEGRAL_APPLICATION_ROUTE",
+  "route": "POST /api/leads",
+  "model_identifier": "gemini-3.6-flash",
+  "latency_ms": 17692,
+  "lead": {
+    "id": "3e9fe733-4c61-4606-99e7-4fa09b3c0100",
+    "status": "ANALYZED",
+    "company_name": "Inversiones Biobío S.A.",
+    "sender_name": "Gabriela Montes",
+    "sender_email": "g.montes@inversionesbiobio.cl"
+  },
   "extraction": {
+    "id": "144fe470-6993-4644-9f25-ff6d1551df6f",
+    "status": "SUCCESS",
     "is_commercial": true,
     "confidence_score": "HIGH",
-    "contact_name": "Fernando Morales",
-    "company_name": "Retail Austral S.A.",
-    "contact_email": "f.morales@retailaustral.cl",
     "request_type": "QUOTE",
-    "scope_summary": "Solicitud de cotización formal para consultoría de optimización comercial y triage de solicitudes.",
+    "scope_summary": "Diagnóstico estratégico de procesos de ventas B2B.",
     "urgency": "MEDIUM"
   },
-  "evidence_count": 5,
+  "evidence_count": 6,
+  "evidence_verified_count": 6,
   "evidence_snippets": [
     {
-      "field": "contact_name",
-      "quote": "Fernando Morales",
+      "field": "company_name",
+      "quote": "Inversiones Biobío S.A.",
       "verified": true
     },
     {
-      "field": "company_name",
-      "quote": "Retail Austral S.A.",
+      "field": "contact_name",
+      "quote": "Gabriela Montes",
       "verified": true
     },
     {
       "field": "contact_email",
-      "quote": "f.morales@retailaustral.cl",
+      "quote": "g.montes@inversionesbiobio.cl",
       "verified": true
     },
     {
       "field": "request_type",
-      "quote": "Requerimos cotización formal",
+      "quote": "Requerimos propuesta comercial",
       "verified": true
     },
     {
       "field": "urgency",
-      "quote": "Favor contactar esta semana.",
+      "quote": "Urgencia media",
+      "verified": true
+    },
+    {
+      "field": "scope_summary",
+      "quote": "diagnóstico estratégico de procesos de ventas B2B",
       "verified": true
     }
-  ]
+  ],
+  "idempotency": {
+    "verified": true,
+    "status_code": 200,
+    "idempotent_replay_header": "true",
+    "duplicate_lead_count_in_db": 1
+  }
 }
 ```
 
-**Evaluación de la Invocación Real:**
-1. **Clasificación y Extracción:** Descomposición 100% certera de la solicitud comercial (`is_commercial: true`, `confidence_score: HIGH`, `request_type: QUOTE`).
-2. **Entidades:** Extracción exacta de persona (`Fernando Morales`), empresa (`Retail Austral S.A.`) y correo (`f.morales@retailaustral.cl`).
-3. **Verificación de Citas (Substring Verification):** Todas las 5 citas extraídas por el modelo existen literalmente en el texto original y fueron verificadas con éxito.
-4. **Respaldo Estricto:** No hubo invención de datos ni entidades no respaldadas.
-5. **Telemetría Registrada:** Latencia de 6.111 ms capturada y modelo exacto `gemini-3.6-flash` registrado.
+**Evaluación de la Invocación Integral:**
+1. **Ruta de la Aplicación Probada:** Se validó la ruta real `POST /api/leads` de Express, con cookies de sesión, parseo de payloads y protección CSRF activa.
+2. **Clasificación y Extracción:** Descomposición 100% certera de la solicitud comercial (`is_commercial: true`, `confidence_score: HIGH`, `request_type: QUOTE`).
+3. **Entidades Persistidas:** Extracción exacta de remitente (`Gabriela Montes`), empresa (`Inversiones Biobío S.A.`) y correo (`g.montes@inversionesbiobio.cl`) directamente persistidos en la tabla `leads` y actualizados a estado `ANALYZED`.
+4. **Verificación de Citas (Substring Verification):** Las 6 citas textuales extraídas por `gemini-3.6-flash` coinciden exactamente palabra por palabra con el texto original y fueron verificadas (`is_verified = 1`) y persistidas en `lead_evidence`.
+5. **Idempotencia Estricta en Vivo:** La re-ejecución inmediata con la misma `idempotency_key` devolvió HTTP 200 con header `X-Idempotent-Replay: true`, confirmando que no se re-invocó a la IA ni se crearon registros duplicados en SQLite (`duplicate_lead_count_in_db: 1`).
+6. **Resiliencia Operativa:** Manejo automático con reintento ante fluctuaciones de demanda (HTTP 503) de la API de Google, completando la operación sin interrupción del servicio.
 
 ---
 
@@ -144,22 +170,23 @@ Resultado empírico obtenido:
 | Criterio | Requisito / Escenario | Estado | Evidencia |
 | :--- | :--- | :---: | :--- |
 | **Tablas relacionales** | `leads`, `lead_extractions`, `lead_evidence` | CUMPLE | Tablas e índices inicializados en `src/db.js`; verificado en test suite. |
-| **Endpoints REST** | `POST /api/leads/analyze`, `POST /api/leads` | CUMPLE | Implementados en `src/app.js` con validación y autenticación. |
+| **Endpoints REST** | `POST /api/leads/analyze`, `POST /api/leads` | CUMPLE | Implementados en `src/app.js` con validación, CORS/CSRF y autenticación. |
 | **Idempotencia Estricta** | Caso 5 (Duplicado exacto / reintento) | CUMPLE | HTTP 200, header `X-Idempotent-Replay: true`, sin re-invocación a Gemini ni duplicación en BD. |
 | **Detección Duplicados** | Caso 6 (Posible duplicado) | CUMPLE | Marcado `is_possible_duplicate = 1` y enlace `duplicate_of_lead_id`; registros independientes sin auto-fusión. |
-| **Modelo y Prompt** | `gemini-3.6-flash` sin alias `latest` | CUMPLE | Configurable vía `.env` / `ai_config`; validación rechaza alias `latest`. |
+| **Modelo y Jerarquía** | `gemini-3.6-flash` con precedencia | CUMPLE | Precedencia de 4 niveles verificada en Test 10; `ai_config` y defaults alineados en `gemini-3.6-flash`. |
 | **Verificación de Citas** | Substring verification | CUMPLE | `verifyEvidenceSnippets` comprueba correspondencia literal y posición en `raw_text`. |
 | **Factuality / No invención** | Caso 2 (Empresa ausente) | CUMPLE | Campos sin respaldo literal permanecen `null`; empresas inventadas son anuladas. |
 | **Resistencia a Inyecciones** | Caso 8 (Instrucción maliciosa contenida) | CUMPLE | Texto enmarcado como no confiable; directivas maliciosas ignoradas. |
-| **Resiliencia ante Fallos** | Caso 9 (Caída/cuota) y Caso 10 | CUMPLE | Errores 429 y timeouts capturados; lead permanece intacto en BD en estado `CAPTURED`. |
-| **Regresión TP-01** | Seguridad, persistencia, auth | CUMPLE | 8/8 pruebas originales de TP-01 superadas sin alteraciones. |
-| **Prueba Empírica Real** | Invocación externa a Gemini | CUMPLE | Ejecución real con Gemini API completada con `status: PASS`, 5 citas verificadas y telemetría registrada. |
+| **Resiliencia ante Fallos** | Caso 9 (Caída/cuota) y Caso 10 | CUMPLE | Errores 429, 503 y timeouts capturados con reintentos; lead permanece intacto en BD en estado `CAPTURED`. |
+| **Regresión TP-01** | Seguridad, persistencia, auth | CUMPLE | 8/8 pruebas originales de TP-01 superadas sin alteraciones (7 unitarias + 1 blackbox). |
+| **Prueba Empírica Real** | Invocación externa a Gemini | CUMPLE | Ejecución integral en ruta de aplicación completada con `status: PASS`, 6 citas verificadas y telemetría registrada. |
 
 ---
 
 ## 5. Conclusión de Delivery
 
-El Task Packet `TP-02` ha cumplido cabalmente con todos los requisitos funcionales, esquemas de persistencia, control de idempotencia, seguridad de prompts, pruebas automatizadas y la **prueba empírica obligatoria con Google Gemini API real**.
+El Task Packet `TP-02` ha completado de forma rigurosa todos los requisitos funcionales, esquemas de persistencia, control de idempotencia, seguridad de prompts, pruebas automatizadas (18/18 PASS) y la **prueba empírica obligatoria con Google Gemini API real a través de la ruta de la aplicación**.
 
 Estado del Task Packet: **`DONE`**.  
 Recomendación para el Sponsor: Cerrar formalmente `TP-02` y evaluar la autorización para iniciar `TP-03` (`Triage UI Master-Detail, Hechos Confirmados y Borradores STALE`).
+

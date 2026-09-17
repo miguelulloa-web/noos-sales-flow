@@ -119,7 +119,7 @@ test('1. Database schema initialization, indices, and default AI config', () => 
 
     const aiConfig = getActiveAiConfig('LEAD_EXTRACTION_CONFIG', db);
     assert.ok(aiConfig, 'AI config should be seeded');
-    assert.equal(aiConfig.model_identifier, 'gemini-2.5-flash');
+    assert.equal(aiConfig.model_identifier, 'gemini-3.6-flash');
     assert.equal(aiConfig.is_active, 1);
   } finally {
     db.close();

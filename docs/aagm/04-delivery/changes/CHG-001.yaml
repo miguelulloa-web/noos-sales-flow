@@ -1,5 +1,5 @@
 id: CHG-001
-requirement: "MVP de Captura y Seguimiento Comercial con IA para NoosAdvisory bajo Ruta A (DEV Local, SQLite persistente, Gemini API gemini-2.5-flash)"
+requirement: "MVP de Captura y Seguimiento Comercial con IA para NoosAdvisory bajo Ruta A (DEV Local, SQLite persistente, Gemini API gemini-3.6-flash)"
 modality: MUST
 type: MODIFICATION
 priority: HIGH

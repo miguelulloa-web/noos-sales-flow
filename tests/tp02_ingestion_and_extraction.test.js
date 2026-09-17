@@ -14,11 +14,17 @@ import {
   listLeads,
   getLatestExtractionByLeadId,
   getEvidenceByExtractionId,
-  getAuditLogs
+  getAuditLogs,
+  getActiveAiConfig
 } from '../src/db.js';
 import { generateSessionToken, hashSessionToken } from '../src/auth.js';
 import { createApp } from '../src/app.js';
-import { verifyEvidenceSnippets, validateAndSanitizeExtraction } from '../src/extraction.js';
+import { 
+  verifyEvidenceSnippets, 
+  validateAndSanitizeExtraction,
+  resolveEffectiveModel,
+  AUTHORIZED_DEFAULT_MODEL
+} from '../src/extraction.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -240,7 +246,7 @@ test('TP-02: 2. Ingesta de Solicitud Clara con Mock de Gemini API', async () => 
     // Extraction record verification
     assert.ok(res.body.extraction);
     assert.equal(res.body.extraction.status, 'SUCCESS');
-    assert.equal(res.body.extraction.model_identifier, 'gemini-2.5-flash');
+    assert.equal(res.body.extraction.model_identifier, 'gemini-3.6-flash');
     assert.equal(res.body.extraction.is_commercial, 1);
     assert.equal(res.body.extraction.confidence_score, 'HIGH');
     assert.equal(res.body.extraction.request_type, 'QUOTE');
@@ -729,3 +735,91 @@ test('TP-02: 9. Validación de payload y límites de tamaño', async () => {
     cleanupTestEnv(env.dbPath);
   }
 });
+
+test('TP-02: 10. Consistencia de Modelo Autorizado y Jerarquía de Precedencia (gemini-3.6-flash)', async () => {
+  const env = setupTestEnv();
+  const originalEnvModel = process.env.GEMINI_MODEL;
+
+  try {
+    // 1. Constante del modelo base autorizado
+    assert.equal(AUTHORIZED_DEFAULT_MODEL, 'gemini-3.6-flash');
+
+    // 2. ai_config en base de datos inicializada
+    const configInDb = getActiveAiConfig('LEAD_EXTRACTION_CONFIG', env.db);
+    assert.ok(configInDb, 'ai_config row debe existir');
+    assert.equal(configInDb.model_identifier, 'gemini-3.6-flash');
+
+    // 3. Jerarquía de Precedencia
+    // 3.1 Nivel 4: Fallback autorizado sin DB ni env
+    delete process.env.GEMINI_MODEL;
+    assert.equal(resolveEffectiveModel(null, null), 'gemini-3.6-flash');
+
+    // 3.2 Nivel 3: Variable de entorno process.env.GEMINI_MODEL (cuando no hay DB)
+    process.env.GEMINI_MODEL = 'gemini-custom-env';
+    assert.equal(resolveEffectiveModel(null, null), 'gemini-custom-env');
+
+    // 3.3 Nivel 2: ai_config activo en base de datos (prevalece sobre variable de entorno)
+    assert.equal(resolveEffectiveModel(null, env.db), 'gemini-3.6-flash');
+
+    // Si actualizamos ai_config en la DB, prevalece sobre env
+    env.db.prepare("UPDATE ai_config SET model_identifier = 'gemini-db-override' WHERE config_key = 'LEAD_EXTRACTION_CONFIG'").run();
+    assert.equal(resolveEffectiveModel(null, env.db), 'gemini-db-override');
+
+    // Restaurar a gemini-3.6-flash
+    env.db.prepare("UPDATE ai_config SET model_identifier = 'gemini-3.6-flash' WHERE config_key = 'LEAD_EXTRACTION_CONFIG'").run();
+
+    // 3.4 Nivel 1: Parámetro explícito (prevalece sobre DB y sobre env)
+    assert.equal(resolveEffectiveModel('gemini-explicit-param', env.db), 'gemini-explicit-param');
+
+    // 4. Verificación en endpoints de la aplicación
+    let capturedModelInFetch = null;
+    const mockCapturingFetch = async (url) => {
+      const match = url.match(/\/models\/([^:]+):generateContent/);
+      if (match) capturedModelInFetch = match[1];
+      return new Response(JSON.stringify({
+        candidates: [{
+          content: {
+            parts: [{
+              text: JSON.stringify({
+                is_commercial: true,
+                confidence_score: "HIGH",
+                contact_name: "Test Lead",
+                company_name: "Test Corp",
+                evidence_snippets: []
+              })
+            }]
+          }
+        }]
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    };
+
+    const app = createApp({ fetchFn: mockCapturingFetch });
+
+    // Ingesta normal usa el modelo efectivo de la base de datos (gemini-3.6-flash)
+    const res = await invokeApp(app, {
+      method: 'POST',
+      url: '/api/leads',
+      headers: { cookie: env.cookie },
+      body: {
+        raw_text: 'Solicitud de prueba para validación de consistencia de modelo.',
+        idempotency_key: 'idemp-model-consistency-01'
+      }
+    });
+
+    assert.equal(res.status, 201);
+    assert.equal(capturedModelInFetch, 'gemini-3.6-flash');
+    assert.equal(res.body.extraction.model_identifier, 'gemini-3.6-flash');
+
+  } finally {
+    if (originalEnvModel !== undefined) {
+      process.env.GEMINI_MODEL = originalEnvModel;
+    } else {
+      delete process.env.GEMINI_MODEL;
+    }
+    cleanupTestEnv(env.dbPath);
+  }
+});
+

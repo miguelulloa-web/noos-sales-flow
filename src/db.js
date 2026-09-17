@@ -164,7 +164,7 @@ export function initSchema(db = getDb()) {
   `);
 
   // Seed default AI config if not present
-  const checkConfig = db.prepare('SELECT id FROM ai_config WHERE config_key = ?').get('LEAD_EXTRACTION_CONFIG');
+  const checkConfig = db.prepare('SELECT id, model_identifier FROM ai_config WHERE config_key = ?').get('LEAD_EXTRACTION_CONFIG');
   if (!checkConfig) {
     const defaultSchema = JSON.stringify({
       type: "object",
@@ -200,12 +200,14 @@ export function initSchema(db = getDb()) {
     `).run(
       crypto.randomUUID(),
       'LEAD_EXTRACTION_CONFIG',
-      'gemini-2.5-flash',
+      'gemini-3.6-flash',
       'Clasifica la solicitud comercial y extrae datos estructurados con citas de evidencia exactas y verificación estricta de hechos.',
       defaultSchema,
       '1.0.0',
       new Date().toISOString()
     );
+  } else if (checkConfig.model_identifier === 'gemini-2.5-flash') {
+    db.prepare("UPDATE ai_config SET model_identifier = 'gemini-3.6-flash', updated_at = ? WHERE config_key = 'LEAD_EXTRACTION_CONFIG'").run(new Date().toISOString());
   }
 }
 

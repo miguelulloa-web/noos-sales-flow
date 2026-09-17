@@ -24,7 +24,8 @@ import {
   getLatestExtractionByLeadId,
   createLeadEvidenceBatch,
   getEvidenceByExtractionId,
-  getEvidenceByLeadId
+  getEvidenceByLeadId,
+  getDb
 } from './db.js';
 import { 
   csrfOriginProtection, 
@@ -32,7 +33,7 @@ import {
   requireAuth, 
   requireRole 
 } from './middleware.js';
-import { extractLeadData } from './extraction.js';
+import { extractLeadData, resolveEffectiveModel } from './extraction.js';
 import crypto from 'node:crypto';
 
 export function createApp(options = {}) {
@@ -181,7 +182,8 @@ export function createApp(options = {}) {
       const result = await extractLeadData({
         rawText: text,
         modelIdentifier: model || null,
-        fetchFn
+        fetchFn,
+        db: getDb()
       });
 
       return res.json({
@@ -321,10 +323,12 @@ export function createApp(options = {}) {
     let updatedLead = lead;
 
     if (auto_analyze !== false) {
+      const effectiveModel = resolveEffectiveModel(null, getDb());
       try {
         const extractionResult = await extractLeadData({
           rawText: raw_text,
-          fetchFn
+          fetchFn,
+          db: getDb()
         });
 
         const { sanitized, latencyMs, modelIdentifier, promptVersion, schemaVersion } = extractionResult;
@@ -398,7 +402,7 @@ export function createApp(options = {}) {
 
         extractionRecord = createLeadExtraction({
           leadId: lead.id,
-          modelIdentifier: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+          modelIdentifier: err.modelIdentifier || effectiveModel,
           latencyMs: err.latencyMs || 0,
           status,
           errorMessage: err.message,

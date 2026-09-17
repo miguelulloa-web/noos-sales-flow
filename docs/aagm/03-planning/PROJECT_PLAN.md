@@ -19,7 +19,7 @@ El proyecto sigue estrictamente la secuencia de gobernanza de AAGM:
 |---|---|---|---|
 | **M1** | PLANNING | `PROJECT_PLAN.md` y `TP-01` a `TP-05` en estado `READY` | Aprobación del Sponsor y autorización scope-bound para iniciar `TP-01` |
 | **M2** | DELIVERY (TP-01) | Servidor Express, SQLite persistente, autenticación de sesiones con tokens hasheados y `audit_log` append-only | Pruebas de persistencia y sesión passing con evidencia durable en DEV |
-| **M3** | DELIVERY (TP-02) | Formulario de captura, control de idempotencia y cliente Gemini API (`gemini-2.5-flash`) | Extracción estructurada con IA real y citas de evidencia verificadas empíricamente |
+| **M3** | DELIVERY (TP-02) | Formulario de captura, control de idempotencia y cliente Gemini API (`gemini-3.6-flash`) | Extracción estructurada con IA real y citas de evidencia verificadas empíricamente |
 | **M4** | DELIVERY (TP-03) | Triage UI master-detail, confirmación de hechos y borradores con estado `STALE` | Flujo de revisión humana e invalidación de borradores verificado en navegador |
 | **M5** | DELIVERY (TP-04) | Asignación de responsables/acciones, bandeja vencida/pendiente, exportación CSV/JSON segura | Flujo comercial de extremo a extremo completado con cálculo de fechas en servidor |
 | **M6** | DELIVERY (TP-05, QA y Gate) | Integración, preparación de demo, validación empírica integral, QA independiente y Release Gate | Candidato estabilizado (TP-05) → QA independiente PASS → Stop obligatorio → Evaluación de Release Gate por ORCHESTRATOR_PM |
@@ -42,7 +42,7 @@ El proyecto sigue estrictamente la secuencia de gobernanza de AAGM:
   2. **`TP-02` (Captura, Idempotencia y Motor de IA Gemini Real):**
      * Endpoint y lógica de recepción de texto libre, hashing y validación de `idempotency_key`.
      * Detección de reintentos exactos (HTTP 200 con replay) y marcado de posibles duplicados (`is_possible_duplicate`).
-     * Integración con Google Gemini API (`gemini-2.5-flash`) mediante Structured Outputs y validación semántica de citas en `lead_extractions` y `lead_evidence`.
+     * Integración con Google Gemini API (`gemini-3.6-flash`) mediante Structured Outputs y validación semántica de citas en `lead_extractions` y `lead_evidence`.
      * **Prueba empírica obligatoria con Gemini API real y una solicitud sintética nueva.**
   3. **`TP-03` (Triage UI, Evidencia, Hechos Confirmados y Borradores STALE):**
      * Interfaz web frontend (Master-Detail) en `http://localhost:3000`.
@@ -74,7 +74,7 @@ El proyecto sigue estrictamente la secuencia de gobernanza de AAGM:
 | **MVP-01** | Acceso y configuración básica | **TP-01** | Login/logout funcional, sesiones con tokens hasheados, cookies `HttpOnly`, middleware de roles `ADMIN` y `OPERATOR`, protección Origin. | **Caso 16** (Permisos y acceso restringido) |
 | **MVP-02** | Ingreso funcional | **TP-02** | Formulario web para ingresar o pegar texto libre y ejemplos sintéticos editables; validación de tamaño. | **Caso 1** (Solicitud clara nueva), **Caso 18** (Caso no precargado) |
 | **MVP-03** | Persistencia e idempotencia | **TP-01, TP-02** | `idempotency_key` previene duplicados en reintentos exactos (HTTP 200 replay); posibles duplicados señalados sin fusionar automáticamente. | **Caso 5** (Duplicado exacto), **Caso 6** (Posible duplicado), **Caso 10** (Fallo al guardar y recuperación) |
-| **MVP-04** | IA real | **TP-02** | Invocación real a Gemini API (`gemini-2.5-flash`) con Structured Outputs; clasificación comercial y datos estructurados; sin mocks en aceptación. | **Caso 1** (Solicitud clara), **Caso 4** (No comercial), **Caso 18** (Caso no precargado) |
+| **MVP-04** | IA real | **TP-02** | Invocación real a Gemini API (`gemini-3.6-flash`) con Structured Outputs; clasificación comercial y datos estructurados; sin mocks en aceptación. | **Caso 1** (Solicitud clara), **Caso 4** (No comercial), **Caso 18** (Caso no precargado) |
 | **MVP-05** | Evidencia y límites | **TP-02, TP-03** | Citas textuales verificadas contra `raw_text`; campos no respaldados permanecen vacíos/nulos; fechas relativas requieren confirmación. | **Caso 2** (Empresa ausente), **Caso 3** (Texto ambiguo), **Caso 7** (Fecha relativa/contradictoria), **Caso 8** (Instrucción maliciosa contenida) |
 | **MVP-06** | Revisión humana | **TP-03** | El operador puede aceptar, editar, descartar o dejar pendiente; cada corrección registra antes/después, autor y fecha; hechos confirmados con versionado. | **Caso 4** (Descarte humano con motivo), **Caso 11** (Corrección humana y trazabilidad) |
 | **MVP-07** | Seguimiento | **TP-04** | Responsable, próxima acción y fecha obligatorios para estado accionable; completar acción registra resultado comercial y programa siguiente acción. | **Caso 12** (Sin próxima acción/responsable/fecha no pasa a accionable) |

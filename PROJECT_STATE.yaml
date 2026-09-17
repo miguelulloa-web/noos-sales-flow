@@ -27,7 +27,7 @@ readiness:
 integrations:
   - name: "Google Gemini API (gemini-3.6-flash)"
     state: VALIDATED
-    notes: "Invocación empírica real PASS (latencia 6111ms, 5 citas verificadas con substring verification)"
+    notes: "Invocación empírica real PASS a través de la ruta de aplicación POST /api/leads (6 citas verificadas al 100% con substring verification, idempotencia validada con X-Idempotent-Replay)"
   - name: "SQLite Database Engine (DEV Local)"
     state: VALIDATED
   - name: "Google Cloud Run"
@@ -45,7 +45,7 @@ environments:
     physical_target: "http://localhost:3000"
     version: "v0.2.0-dev (TP-02 complete & empirically validated with Gemini real)"
     protection: UNPROTECTED
-    validation: "Pass (npm test: 17/17 tests PASS, unit + mocks + real empirical Gemini PASS)"
+    validation: "Pass (npm test: 18/18 tests PASS, unit + mocks + validación empírica integral en ruta POST /api/leads PASS)"
   - logical_name: STAGE_GCP
     physical_target: "Google Cloud Run"
     version: null

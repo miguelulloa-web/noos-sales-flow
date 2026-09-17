@@ -11,12 +11,12 @@ persistence:
   state: SELECTED
 external_integrations:
   - name: "Google Gemini API"
-    model_identifier: "gemini-2.5-flash"
-    verification_date: "2026-09-14"
+    model_identifier: "gemini-3.6-flash"
+    verification_date: "2026-09-16"
     endpoint: "https://generativelanguage.googleapis.com"
     structured_outputs: true
-    state: SELECTED
-    validation_rule: "Sujeto a comprobación real de disponibilidad con credencial de desarrollo durante Delivery"
+    state: VALIDATED
+    validation_rule: "Comprobado empíricamente en ruta de aplicación POST /api/leads con credencial local DEV"
 side_effects_allowed: []
 deployment_owner: DEVELOPER
 promotion_from: null
