@@ -27,7 +27,7 @@ readiness:
 integrations:
   - name: "Google Gemini API (gemini-3.6-flash)"
     state: VALIDATED
-    notes: "Invocación empírica real PASS a través de la ruta de aplicación POST /api/leads (6 citas verificadas al 100% con substring verification, idempotencia validada con X-Idempotent-Replay)"
+    notes: "Invocación empírica real PASS a través de la ruta de aplicación POST /api/leads (6 citas verificadas con substring verification, idempotencia validada con X-Idempotent-Replay)"
   - name: "SQLite Database Engine (DEV Local)"
     state: VALIDATED
   - name: "Google Cloud Run"
@@ -45,7 +45,7 @@ environments:
     physical_target: "http://localhost:3000"
     version: "v0.2.0-dev (TP-02 complete & empirically validated with Gemini real)"
     protection: UNPROTECTED
-    validation: "Pass (npm test: 18/18 tests PASS, unit + mocks + validación empírica integral en ruta POST /api/leads PASS)"
+    validation: "Pass (npm test: 19/19 tests PASS, unit + mocks + validación empírica integral en ruta POST /api/leads PASS)"
   - logical_name: STAGE_GCP
     physical_target: "Google Cloud Run"
     version: null
@@ -59,11 +59,12 @@ quality:
 authorization:
   implementation_scope: "TP-02 — Ingesta de Solicitudes, Idempotencia y Motor de Extracción con IA Gemini Real (COMPLETADO Y VALIDADO)"
   authorized_by: "Sponsor (Miguel Ulloa)"
-  authorized_at: "2026-09-16T11:20:10-03:00"
+  authorized_at: "2026-09-17T11:44:55-03:00"
   expires_on_scope_change: true
 next_action:
-  sponsor: "Revisar evidencia durable de TP-02 (EV-TP-02.md, PASS con Gemini real) y evaluar autorización para TP-03"
+  sponsor: "Revisar evidencia durable de TP-02 (EV-TP-02.md, PASS con Gemini real y 19/19 tests) y evaluar autorización para TP-03"
   internal: AWAITING_IMPLEMENTATION_APPROVAL_TP_03
 dashboard:
   sync_status: SYNCED
-  last_synced_at: "2026-09-16T13:20:00-03:00"
+  last_synced_at: "2026-09-17T11:51:00-03:00"
+

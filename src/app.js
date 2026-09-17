@@ -348,6 +348,7 @@ export function createApp(options = {}) {
           urgency: sanitized.urgency,
           suggestedResponseDraft: sanitized.suggestedResponseDraft,
           latencyMs,
+          retryCount: extractionResult.retryCount || 0,
           status: 'SUCCESS'
         });
 
@@ -404,6 +405,7 @@ export function createApp(options = {}) {
           leadId: lead.id,
           modelIdentifier: err.modelIdentifier || effectiveModel,
           latencyMs: err.latencyMs || 0,
+          retryCount: err.retryCount || 0,
           status,
           errorMessage: err.message,
           confidenceScore: 'NOT_FOUND',

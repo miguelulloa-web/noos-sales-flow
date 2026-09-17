@@ -823,3 +823,100 @@ test('TP-02: 10. Consistencia de Modelo Autorizado y Jerarquía de Precedencia (
   }
 });
 
+test('TP-02: 11. Manejo y persistencia de retry_count ante errores 503 transitorios y fallos definitivos', async () => {
+  const env = setupTestEnv();
+
+  try {
+    const rawText = "Hola equipo Noos, soy Valeria Ramos de Constructora Andina (valeria@constructoraandina.cl). Solicitamos propuesta para consultoría comercial.";
+
+    // 1. Caso 1: 503 en primer intento, éxito en el reintento (retry_count = 1)
+    let callCountSuccess = 0;
+    const mock503ThenSuccess = async () => {
+      callCountSuccess++;
+      if (callCountSuccess === 1) {
+        return new Response('High demand spike', { status: 503 });
+      }
+      return new Response(JSON.stringify({
+        candidates: [{
+          content: {
+            parts: [{
+              text: JSON.stringify({
+                is_commercial: true,
+                confidence_score: "HIGH",
+                contact_name: "Valeria Ramos",
+                company_name: "Constructora Andina",
+                contact_email: "valeria@constructoraandina.cl",
+                contact_phone: null,
+                request_type: "QUOTE",
+                scope_summary: "Consultoría comercial",
+                urgency: "MEDIUM",
+                evidence_snippets: [
+                  { field: "contact_name", quote: "Valeria Ramos" },
+                  { field: "company_name", quote: "Constructora Andina" }
+                ],
+                suggested_response_draft: "Estimada Valeria, gracias por contactar a NoosAdvisory."
+              })
+            }]
+          }
+        }]
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    };
+
+    const appSuccess = createApp({ fetchFn: mock503ThenSuccess });
+    const resSuccess = await invokeApp(appSuccess, {
+      method: 'POST',
+      url: '/api/leads',
+      headers: { cookie: env.cookie },
+      body: {
+        raw_text: rawText,
+        idempotency_key: 'idemp-retry-count-01'
+      }
+    });
+
+    assert.equal(resSuccess.status, 201);
+    assert.equal(resSuccess.body.lead.status, 'ANALYZED');
+    assert.equal(callCountSuccess, 2, 'Debe haber ejecutado exactamente 2 llamadas (1 inicial + 1 reintento)');
+
+    // Verificar en la base de datos que retry_count es 1
+    const dbExtractionSuccess = getLatestExtractionByLeadId(resSuccess.body.lead.id, env.db);
+    assert.ok(dbExtractionSuccess);
+    assert.equal(dbExtractionSuccess.status, 'SUCCESS');
+    assert.equal(dbExtractionSuccess.retry_count, 1, 'retry_count debe ser 1 tras recuperarse de un 503');
+
+    // 2. Caso 2: 503 persistente que agota reintentos (maxRetries = 2 -> 3 llamadas en total, retry_count = 2)
+    let callCountFailure = 0;
+    const mock503Always = async () => {
+      callCountFailure++;
+      return new Response('Unavailable', { status: 503 });
+    };
+
+    const appFailure = createApp({ fetchFn: mock503Always });
+    const resFailure = await invokeApp(appFailure, {
+      method: 'POST',
+      url: '/api/leads',
+      headers: { cookie: env.cookie },
+      body: {
+        raw_text: "Solicitud con falla permanente de 503 en la API de IA.",
+        idempotency_key: 'idemp-retry-count-02'
+      }
+    });
+
+    assert.equal(resFailure.status, 201, 'El lead debe guardarse en estado CAPTURED');
+    assert.equal(resFailure.body.lead.status, 'CAPTURED');
+    assert.equal(callCountFailure, 3, 'Debe haber intentado 1 llamada inicial + 2 reintentos');
+
+    // Verificar en la base de datos que retry_count es 2 en el registro de extracción fallida
+    const dbExtractionFailure = getLatestExtractionByLeadId(resFailure.body.lead.id, env.db);
+    assert.ok(dbExtractionFailure);
+    assert.equal(dbExtractionFailure.status, 'FAILED');
+    assert.equal(dbExtractionFailure.retry_count, 2, 'retry_count debe ser 2 al agotar reintentos');
+
+  } finally {
+    cleanupTestEnv(env.dbPath);
+  }
+});
+
+

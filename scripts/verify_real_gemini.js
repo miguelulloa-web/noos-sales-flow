@@ -50,7 +50,7 @@ function invokeApp(app, { method = 'GET', url = '/', headers = {}, body = null }
 
     res.setHeader = (k, v) => {
       const lower = k.toLowerCase();
-      resHeaders[lower] = v;
+      resHeaders[lower] = String(v);
     };
     res.getHeader = (k) => resHeaders[k.toLowerCase()];
     res.removeHeader = (k) => { delete resHeaders[k.toLowerCase()]; };
@@ -83,7 +83,8 @@ async function main() {
       message: 'GEMINI_API_KEY no está configurada en el entorno local de Noos Sales Flow (.env o variables del host).',
       empirical_test: 'SKIPPED'
     }, null, 2));
-    process.exit(2);
+    process.exitCode = 2;
+    return;
   }
 
   const __filename = fileURLToPath(import.meta.url);
@@ -120,6 +121,9 @@ async function main() {
   console.log('[EMPIRICAL_TEST] Ejecutando validación integral a través de la ruta de aplicación (POST /api/leads) con Gemini real...');
   const startTime = Date.now();
 
+  let exitCode = 0;
+  let resultOutput = null;
+
   try {
     const app = createApp();
 
@@ -138,7 +142,7 @@ async function main() {
       }
     });
 
-    const latencyMs = Date.now() - startTime;
+    const wallClockMs = Date.now() - startTime;
 
     if (res1.status !== 201) {
       throw new Error(`POST /api/leads devolvió status ${res1.status}: ${JSON.stringify(res1.body)}`);
@@ -154,8 +158,29 @@ async function main() {
 
     if (!dbLead) throw new Error('Lead no persistido en la base de datos');
     if (!dbExtraction) throw new Error('Extracción no persistida en la base de datos');
+
+    // Assertion: status must be SUCCESS
     if (dbExtraction.status !== 'SUCCESS') {
-      throw new Error(`Extracción en estado no exitoso: ${dbExtraction.status}, error: ${dbExtraction.error_message}`);
+      throw new Error(`Extracción no exitosa: estado '${dbExtraction.status}', error: '${dbExtraction.error_message}'`);
+    }
+
+    // Assertion: model must be gemini-3.6-flash
+    if (dbExtraction.model_identifier !== 'gemini-3.6-flash') {
+      throw new Error(`Modelo persistido inesperado: esperado 'gemini-3.6-flash', obtenido '${dbExtraction.model_identifier}'`);
+    }
+
+    // Assertion: evidence must exist and all quotes must be verified
+    if (!dbEvidence || dbEvidence.length === 0) {
+      throw new Error('No se persistieron evidencias para la extracción');
+    }
+    const unverifiedQuotes = dbEvidence.filter(e => e.is_verified !== 1);
+    if (unverifiedQuotes.length > 0) {
+      throw new Error(`Existen ${unverifiedQuotes.length} citas de evidencia no verificadas en la base de datos: ${JSON.stringify(unverifiedQuotes)}`);
+    }
+
+    // Assertion: retry_count must be a valid non-negative integer
+    if (typeof dbExtraction.retry_count !== 'number' || dbExtraction.retry_count < 0) {
+      throw new Error(`retry_count inválido persistido en lead_extractions: ${dbExtraction.retry_count}`);
     }
 
     // 3. Re-execution with exact same idempotency key
@@ -173,16 +198,32 @@ async function main() {
       }
     });
 
-    const isReplay = res2.status === 200 && res2.body.idempotent_replay === true;
     const allLeads = db.prepare('SELECT COUNT(*) as count FROM leads WHERE idempotency_key = ?').get(idempotencyKey);
     const duplicateCount = allLeads?.count || 0;
 
-    const output = {
+    // Hardened replay assertions
+    if (res2.status !== 200) {
+      throw new Error(`Reenvío idempotente devolvió status HTTP ${res2.status} (esperado 200)`);
+    }
+    if (!res2.body || res2.body.idempotent_replay !== true) {
+      throw new Error(`Reenvío idempotente no incluyó 'idempotent_replay: true' en el body: ${JSON.stringify(res2.body)}`);
+    }
+    const replayHeader = res2.headers['x-idempotent-replay'];
+    if (replayHeader !== 'true') {
+      throw new Error(`Reenvío idempotente no incluyó header 'X-Idempotent-Replay: true' (obtenido: '${replayHeader}')`);
+    }
+    if (duplicateCount !== 1) {
+      throw new Error(`Cantidad de registros de lead para la clave de idempotencia: esperado 1, obtenido ${duplicateCount}`);
+    }
+
+    resultOutput = {
       status: 'PASS',
       validation_mode: 'INTEGRAL_APPLICATION_ROUTE',
       route: 'POST /api/leads',
       model_identifier: dbExtraction.model_identifier,
-      latency_ms: latencyMs,
+      latency_ms: dbExtraction.latency_ms,
+      wall_clock_ms: wallClockMs,
+      retry_count: dbExtraction.retry_count,
       lead: {
         id: dbLead.id,
         status: dbLead.status,
@@ -197,7 +238,8 @@ async function main() {
         confidence_score: dbExtraction.confidence_score,
         request_type: dbExtraction.request_type,
         scope_summary: dbExtraction.scope_summary,
-        urgency: dbExtraction.urgency
+        urgency: dbExtraction.urgency,
+        retry_count: dbExtraction.retry_count
       },
       evidence_count: dbEvidence.length,
       evidence_verified_count: dbEvidence.filter(e => e.is_verified === 1).length,
@@ -207,33 +249,58 @@ async function main() {
         verified: e.is_verified === 1
       })),
       idempotency: {
-        verified: isReplay && duplicateCount === 1,
+        verified: true,
         status_code: res2.status,
-        idempotent_replay_header: res2.headers['x-idempotent-replay'] || false,
+        idempotent_replay_body: res2.body.idempotent_replay === true,
+        idempotent_replay_header: replayHeader === 'true',
         duplicate_lead_count_in_db: duplicateCount
       }
     };
 
-    console.log(JSON.stringify(output, null, 2));
-    process.exit(0);
-
   } catch (err) {
+    exitCode = 1;
     console.error(JSON.stringify({
       status: 'FAILED',
       error_code: err.code || 'UNKNOWN',
       error_message: err.message
     }, null, 2));
-    process.exit(1);
   } finally {
     closeDb();
-    if (fs.existsSync(dbPath)) {
-      try { fs.unlinkSync(dbPath); } catch {}
+    let purgedFilesCount = 0;
+    if (fs.existsSync(dataDir)) {
+      const files = fs.readdirSync(dataDir);
+      for (const file of files) {
+        const filePath = path.join(dataDir, file);
+        try {
+          fs.unlinkSync(filePath);
+          purgedFilesCount++;
+        } catch (err) {
+          console.error(`[CLEANUP_ERROR] No se pudo eliminar archivo residual ${filePath}: ${err.message}`);
+        }
+      }
+      try {
+        if (fs.readdirSync(dataDir).length === 0) {
+          fs.rmdirSync(dataDir);
+        }
+      } catch (err) {
+        console.error(`[CLEANUP_ERROR] No se pudo remover directorio ${dataDir}: ${err.message}`);
+      }
     }
-    const walPath = `${dbPath}-wal`;
-    const shmPath = `${dbPath}-shm`;
-    if (fs.existsSync(walPath)) try { fs.unlinkSync(walPath); } catch {}
-    if (fs.existsSync(shmPath)) try { fs.unlinkSync(shmPath); } catch {}
+    console.log(`[CLEANUP] Archivos residuales eliminados de data_empirical: ${purgedFilesCount}`);
+    if (resultOutput) {
+      resultOutput.cleanup = {
+        purged_files_count: purgedFilesCount,
+        data_empirical_dir_removed: !fs.existsSync(dataDir)
+      };
+      console.log(JSON.stringify(resultOutput, null, 2));
+    }
   }
+
+  process.exitCode = exitCode;
 }
 
-main();
+main().catch((err) => {
+  console.error('Unhandled fatal error in verify_real_gemini:', err);
+  process.exitCode = 1;
+});
+

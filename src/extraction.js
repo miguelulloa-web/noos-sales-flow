@@ -259,12 +259,10 @@ export async function callGeminiApi({
     }
   };
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-
   const startTime = Date.now();
   let retries = 0;
   const maxRetries = 2;
+  const retryDelayMs = process.env.NODE_ENV === 'test' ? 10 : 1500;
 
   while (true) {
     const controller = new AbortController();
@@ -285,7 +283,7 @@ export async function callGeminiApi({
 
       if (res.status === 503 && retries < maxRetries) {
         retries++;
-        await new Promise(r => setTimeout(r, 1500 * retries));
+        await new Promise(r => setTimeout(r, retryDelayMs * retries));
         continue;
       }
 
