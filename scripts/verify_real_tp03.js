@@ -269,8 +269,8 @@ Saludos cordiales.`;
     }
 
     // 8. Generate Draft linked to v2 with REAL Gemini
-    console.log('[EMPIRICAL] Esperando 15s antes de generar borrador v2...');
-    await new Promise(r => setTimeout(r, 15000));
+    console.log('[EMPIRICAL] Esperando 20s antes de generar borrador v2...');
+    await new Promise(r => setTimeout(r, 20000));
 
     const draftV2Res = await invokeApp(app, {
       method: 'POST',

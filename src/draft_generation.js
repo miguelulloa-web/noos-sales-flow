@@ -43,7 +43,7 @@ export async function generateCommercialDraft({
   confirmedFacts,
   apiKey = process.env.GEMINI_API_KEY,
   model = null,
-  timeoutMs = Number(process.env.GEMINI_TIMEOUT_MS) || 45000,
+  timeoutMs = Number(process.env.GEMINI_TIMEOUT_MS) || 60000,
   fetchFn = fetch,
   db = null
 } = {}) {
