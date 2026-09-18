@@ -100,8 +100,8 @@ export async function generateCommercialDraft({
 
   const startTime = Date.now();
   let retries = 0;
-  const maxRetries = 2;
-  const retryDelayMs = process.env.NODE_ENV === 'test' ? 10 : 1500;
+  const maxRetries = 3;
+  const retryDelayMs = (process.env.NODE_ENV === 'test' && !process.env.DB_PATH?.includes('empirical')) ? 10 : 2500;
 
   while (true) {
     const controller = new AbortController();
