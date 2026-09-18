@@ -3,8 +3,8 @@ requirement: "MVP de Captura y Seguimiento Comercial con IA para NoosAdvisory ba
 modality: MUST
 type: MODIFICATION
 priority: HIGH
-status: IMPLEMENTING
-current_stage: IMPLEMENTING
+status: PENDING_VALIDATION
+current_stage: PENDING_VALIDATION
 owner: ORCHESTRATOR_PM
 decision_refs:
   - "Ruta A aprobada por Sponsor (2026-09-14)"
@@ -13,11 +13,11 @@ impact_analysis_ref: "docs/aagm/04-delivery/impact-analysis/IA-CHG-001.md"
 approvals:
   requirement: "Aprobado por Sponsor (2026-09-14)"
   solution_design: "Aprobado por Sponsor (2026-09-14)"
-  implementation_scope: "Autorizado por Sponsor exclusivamente para TP-01 (2026-09-15) y TP-02 (2026-09-16)"
+  implementation_scope: "Autorizado por Sponsor para TP-01 (2026-09-15), TP-02 (2026-09-16) y TP-03 (2026-09-17)"
 task_packets:
   - TP-01 (DONE)
   - TP-02 (DONE)
-  - TP-03 (DRAFT)
+  - TP-03 (PENDING_VALIDATION)
   - TP-04 (DRAFT)
   - TP-05 (DRAFT)
 commits_or_prs:
@@ -26,6 +26,7 @@ commits_or_prs:
   - "7f0282e (docs(evidence): correct EV-TP-01 evaluator role to Delivery and update conclusion heading)"
   - "8397b15 (feat(leads): implement TP-02 ingestion, idempotency, and Gemini extraction engine)"
   - "d6ae696 (docs(delivery): register EV-TP-02 and sync project state to PENDING_VALIDATION)"
+  - "0df44c3 (fix(leads): harden verify_real_gemini cleanup and assertions, persist retry_count, and remove orphan timer)"
 evidence:
   - "docs/aagm/02-solution-design/EV-003-solution-design.md"
   - "docs/aagm/03-planning/EV-004-planning.md"
@@ -35,4 +36,4 @@ qa_ref: null
 release: null
 environment: DEV
 production_validation_ref: null
-next_action: "Presentar resultados de TP-02 (EV-TP-02.md, PASS con Gemini real) al Sponsor y solicitar autorización formal para TP-03"
+next_action: "Implementar y validar alcance de TP-03 (Triage UI Master-Detail, Hechos Confirmados y Borradores STALE)"

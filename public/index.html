@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NoosAdvisory · Triage Comercial y Borradores Supervisados</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Top Navigation Bar -->
+  <header class="app-header" role="banner">
+    <div class="brand">
+      <span class="brand-badge">B2B SUITE</span>
+      <div>
+        <div class="brand-title">NoosAdvisory</div>
+        <div class="brand-subtitle">Triage Comercial & Motor Supervisado</div>
+      </div>
+    </div>
+
+    <div class="header-actions" id="authNavArea">
+      <button class="btn btn-primary" id="btnOpenNewLeadModal" aria-haspopup="dialog">+ Nueva Solicitud</button>
+      <div class="user-pill" id="userPill" style="display: none;">
+        <span id="userName">Operador</span>
+        <span class="role-tag" id="userRole">OPERATOR</span>
+      </div>
+      <button class="btn btn-secondary" id="btnLogout" style="display: none;">Cerrar sesión</button>
+    </div>
+  </header>
+
+  <!-- Login Modal / Screen (shown if not authenticated) -->
+  <div class="modal-overlay" id="loginModal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="loginTitle">Acceso de Consultor NoosAdvisory</h2>
+      </div>
+      <p style="font-size: 13px; color: var(--text-muted);">Inicie sesión con su cuenta corporativa para acceder a la bandeja de triage y confirmación de hechos.</p>
+      <form id="loginForm" style="display: flex; flex-direction: column; gap: 12px;">
+        <div class="form-group">
+          <label class="form-label" for="loginEmail">Correo electrónico</label>
+          <input class="form-control" type="email" id="loginEmail" required placeholder="consultor@noosadvisory.com" autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="loginPassword">Contraseña</label>
+          <input class="form-control" type="password" id="loginPassword" required placeholder="••••••••" autocomplete="current-password">
+        </div>
+        <div id="loginError" style="color: var(--danger-text); font-size: 12px; display: none;"></div>
+        <button type="submit" class="btn btn-primary" style="margin-top: 8px;">Ingresar al Sistema</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- New Lead Ingestion Modal -->
+  <div class="modal-overlay" id="newLeadModal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="newLeadTitle">
+    <div class="modal-card" style="max-width: 600px;">
+      <div class="modal-header">
+        <h2 id="newLeadTitle">Ingesta de Nueva Solicitud Comercial</h2>
+        <button class="btn btn-secondary" id="btnCloseNewLeadModal" style="padding: 4px 8px;" aria-label="Cerrar modal">&times;</button>
+      </div>
+      <p style="font-size: 13px; color: var(--text-muted);">Pegue el texto original íntegro recibido del prospecto. Se procesará con control de idempotencia y extracción con IA.</p>
+      <form id="newLeadForm" style="display: flex; flex-direction: column; gap: 14px;">
+        <div class="form-group">
+          <label class="form-label" for="newLeadText">Texto Original de la Solicitud</label>
+          <textarea class="form-control" id="newLeadText" rows="6" required placeholder="Ej: Hola equipo NoosAdvisory, soy Gabriela Montes de Inversiones Biobío S.A. (g.montes@inversionesbiobio.cl)..." style="resize: vertical;"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="newLeadIdempKey">Clave de Idempotencia (opcional)</label>
+          <input class="form-control" type="text" id="newLeadIdempKey" placeholder="Se genera automáticamente si se deja vacío">
+        </div>
+        <div id="newLeadError" style="color: var(--danger-text); font-size: 12px; display: none;"></div>
+        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+          <button type="button" class="btn btn-secondary" id="btnCancelNewLead">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btnSubmitNewLead">Procesar e Ingestar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Main App Layout: Master-Detail -->
+  <div class="app-container" id="appMain" role="main">
+    
+    <!-- Master Panel: List of Leads -->
+    <aside class="master-panel" aria-label="Bandeja de Triage">
+      <div class="master-toolbar">
+        <input type="search" class="search-input" id="searchLeadsInput" placeholder="Buscar por empresa, contacto o texto..." aria-label="Buscar solicitudes">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 12px; font-weight: 600; color: var(--text-muted);" id="leadCountLabel">0 solicitudes</span>
+          <select id="statusFilter" class="form-control" style="width: auto; padding: 4px 8px; font-size: 12px;" aria-label="Filtrar por estado">
+            <option value="">Todos los estados</option>
+            <option value="CAPTURED">CAPTURED</option>
+            <option value="ANALYZED">ANALYZED</option>
+            <option value="TRIAGED">TRIAGED</option>
+          </select>
+        </div>
+      </div>
+      <div class="lead-list" id="leadsListContainer" role="listbox" aria-label="Lista de solicitudes recibidas">
+        <!-- Lead cards rendered dynamically -->
+      </div>
+    </aside>
+
+    <!-- Detail Panel -->
+    <section class="detail-panel" id="detailPanel" aria-label="Detalle de Solicitud y Triage">
+      <div id="emptyDetailState" style="margin: auto; text-align: center; color: var(--text-muted); padding: 40px;">
+        <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="margin-bottom: 12px; opacity: 0.6;"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"></path></svg>
+        <h3>Seleccione una solicitud de la lista</h3>
+        <p style="font-size: 13px;">Podrá revisar el texto inmutable, los hechos extraídos, confirmar versiones y generar borradores de respuesta.</p>
+      </div>
+
+      <div id="activeDetailContent" style="display: none; display: flex; flex-direction: column; gap: 20px;">
+        
+        <!-- Detail Header -->
+        <div class="detail-header">
+          <div class="detail-title-group">
+            <h2 id="leadHeaderCompany">Empresa Prospecto</h2>
+            <p><span id="leadHeaderContact">Contacto</span> &bull; <span id="leadHeaderEmail">email</span> &bull; ID: <code id="leadHeaderId">UUID</code></p>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <span class="badge badge-status" id="leadStatusBadge">CAPTURED</span>
+            <span class="badge badge-status" id="leadUrgencyBadge">URGENCIA MEDIA</span>
+          </div>
+        </div>
+
+        <div class="detail-grid">
+          
+          <!-- Column 1: Texto Inmutable Original -->
+          <div class="detail-card">
+            <div class="detail-card-header">
+              <div class="detail-card-title">
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"></path></svg>
+                Texto Original Recibido
+              </div>
+              <span class="badge" style="background-color: #f1f5f9; color: var(--text-muted);">INMUTABLE</span>
+            </div>
+            <div class="security-warning-banner">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"></path></svg>
+              <span>El texto de entrada es inmutable y se preserva íntegramente sin alteraciones.</span>
+            </div>
+            <div class="raw-text-box" id="leadRawText">Cargando texto original...</div>
+            <div style="font-size: 11px; color: var(--text-muted); display: flex; justify-content: space-between;">
+              <span>Canal: <strong id="leadSource">MANUAL</strong></span>
+              <span>Fecha: <span id="leadCreatedAt">-</span></span>
+            </div>
+          </div>
+
+          <!-- Column 2: Extracción IA y Citas de Evidencia -->
+          <div class="detail-card">
+            <div class="detail-card-header">
+              <div class="detail-card-title">
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z"></path></svg>
+                Extracción IA & Citas de Respaldo
+              </div>
+              <span class="badge badge-status" id="aiModelBadge">gemini-3.6-flash</span>
+            </div>
+            <div style="display: flex; gap: 12px; font-size: 12px;">
+              <span>Certeza: <strong id="aiConfidenceScore">-</strong></span>
+              <span>Comercial: <strong id="aiIsCommercial">-</strong></span>
+              <span>Reintentos: <strong id="aiRetryCount">0</strong></span>
+            </div>
+            <div>
+              <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px;">EVIDENCIAS VERIFICADAS PALABRA POR PALABRA:</div>
+              <div class="evidence-list" id="evidenceListContainer">
+                <!-- Evidence snippets rendered here -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Section: Hechos Confirmados (Human-in-the-loop) -->
+          <div class="detail-card" style="grid-column: span 2;">
+            <div class="detail-card-header">
+              <div class="detail-card-title">
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"></path></svg>
+                Hechos Confirmados por Consultor Humano
+              </div>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <span class="badge badge-status" id="factsVersionBadge">Sin versión</span>
+                <span style="font-size: 11px; color: var(--text-muted);" id="factsAuthorMeta"></span>
+              </div>
+            </div>
+
+            <form id="confirmedFactsForm" class="facts-form">
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label" for="factContactName">Nombre de Contacto</label>
+                  <input class="form-control" type="text" id="factContactName" placeholder="Nombre completo">
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="factCompanyName">Empresa / Organización</label>
+                  <input class="form-control" type="text" id="factCompanyName" placeholder="Razón social o nombre">
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label" for="factContactEmail">Correo Electrónico</label>
+                  <input class="form-control" type="email" id="factContactEmail" placeholder="correo@empresa.cl">
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="factContactPhone">Teléfono</label>
+                  <input class="form-control" type="tel" id="factContactPhone" placeholder="+56 9 1234 5678">
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label" for="factRequestType">Tipo de Requerimiento *</label>
+                  <select class="form-control" id="factRequestType" required>
+                    <option value="QUOTE">QUOTE — Solicitud de Propuesta / Cotización</option>
+                    <option value="INQUIRY">INQUIRY — Consulta Estratégica / Comercial</option>
+                    <option value="DEMO">DEMO — Demostración de Servicios</option>
+                    <option value="OTHER">OTHER — Otro requerimiento</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="factUrgency">Nivel de Urgencia *</label>
+                  <select class="form-control" id="factUrgency" required>
+                    <option value="LOW">Baja (Sin fecha límite estricta)</option>
+                    <option value="MEDIUM" selected>Media (Próximas semanas)</option>
+                    <option value="HIGH">Alta (Inmediata / esta semana)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="factScopeSummary">Alcance Confirmado / Resumen del Diagnóstico *</label>
+                <textarea class="form-control" id="factScopeSummary" rows="3" required placeholder="Detalle validado del requerimiento comercial..."></textarea>
+              </div>
+
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
+                <div id="factsSaveFeedback" style="font-size: 12px; color: var(--success-text);"></div>
+                <button type="submit" class="btn btn-primary" id="btnSaveFacts">Guardar Hechos Confirmados</button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Section: Borrador de Respuesta Comercial & STALE Warning -->
+          <div class="detail-card draft-card">
+            <div class="detail-card-header">
+              <div class="detail-card-title">
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z"></path></svg>
+                Borrador de Respuesta Comercial Supervisado
+              </div>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <span class="badge badge-status" id="draftStatusBadge">SIN BORRADOR</span>
+                <span style="font-size: 11px; color: var(--text-muted);" id="draftVersionMeta"></span>
+              </div>
+            </div>
+
+            <!-- STALE Warning Banner (Visible only when STALE) -->
+            <div class="stale-warning-banner" id="staleWarningBanner" style="display: none;" role="alert">
+              <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"></path></svg>
+              <div>
+                <strong>Borrador Desactualizado (STALE):</strong> Este texto se generó a partir de una versión previa de hechos confirmados. La copia directa está estrictamente bloqueada hasta que lo regenere con la versión vigente de hechos o lo actualice manualmente.
+              </div>
+            </div>
+
+            <textarea class="draft-textarea" id="draftTextarea" placeholder="No se ha generado un borrador aún. Confirme los hechos del lead y haga clic en 'Generar Borrador con IA'." aria-label="Texto del borrador de respuesta comercial"></textarea>
+
+            <div class="draft-actions">
+              <button class="btn btn-secondary" id="btnSaveDraftEdit" disabled>Guardar Ajustes Manuales</button>
+              <button class="btn btn-primary" id="btnGenerateDraft">
+                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"></path></svg>
+                <span id="btnGenerateDraftLabel">Generar Borrador con IA</span>
+              </button>
+              <button class="btn btn-success" id="btnCopyDraft" disabled>
+                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184"></path></svg>
+                Copiar al Portapapeles
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- Toast for User Feedback -->
+  <div class="toast" id="appToast" style="display: none;" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

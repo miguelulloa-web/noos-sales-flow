@@ -138,6 +138,41 @@ export function initSchema(db = getDb()) {
       FOREIGN KEY (extraction_id) REFERENCES lead_extractions(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS lead_confirmed_facts (
+      id TEXT PRIMARY KEY,
+      lead_id TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      contact_name TEXT,
+      company_name TEXT,
+      contact_email TEXT,
+      contact_phone TEXT,
+      request_type TEXT NOT NULL CHECK(request_type IN ('QUOTE', 'INQUIRY', 'DEMO', 'OTHER')),
+      scope_summary TEXT NOT NULL,
+      urgency TEXT NOT NULL CHECK(urgency IN ('LOW', 'MEDIUM', 'HIGH')),
+      confirmed_by_user_id TEXT NOT NULL,
+      confirmed_at TEXT NOT NULL,
+      is_current INTEGER NOT NULL DEFAULT 1,
+      FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE,
+      FOREIGN KEY (confirmed_by_user_id) REFERENCES users(id),
+      UNIQUE (lead_id, version)
+    );
+
+    CREATE TABLE IF NOT EXISTS response_drafts (
+      id TEXT PRIMARY KEY,
+      lead_id TEXT NOT NULL,
+      confirmed_facts_version INTEGER NOT NULL,
+      model_identifier TEXT NOT NULL,
+      prompt_version TEXT NOT NULL,
+      initial_draft_text TEXT NOT NULL,
+      edited_text TEXT,
+      status TEXT NOT NULL CHECK(status IN ('GENERATED', 'EDITED', 'APPROVED_COPIED', 'STALE', 'DISCARDED')),
+      reviewed_by_user_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE,
+      FOREIGN KEY (reviewed_by_user_id) REFERENCES users(id)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_sessions_token_hash ON auth_sessions(session_token_hash);
     CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON auth_sessions(user_id);
     CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log(entity_type, entity_id);
@@ -148,6 +183,11 @@ export function initSchema(db = getDb()) {
     CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
     CREATE INDEX IF NOT EXISTS idx_extractions_lead_id ON lead_extractions(lead_id);
     CREATE INDEX IF NOT EXISTS idx_evidence_extraction ON lead_evidence(extraction_id);
+    CREATE INDEX IF NOT EXISTS idx_confirmed_facts_lead ON lead_confirmed_facts(lead_id);
+    CREATE INDEX IF NOT EXISTS idx_confirmed_facts_current ON lead_confirmed_facts(lead_id, is_current);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_confirmed_facts_unique_current ON lead_confirmed_facts(lead_id) WHERE is_current = 1;
+    CREATE INDEX IF NOT EXISTS idx_response_drafts_lead ON response_drafts(lead_id);
+    CREATE INDEX IF NOT EXISTS idx_response_drafts_status ON response_drafts(status);
 
     -- Enforce append-only integrity at SQLite engine level: forbid UPDATE and DELETE
     CREATE TRIGGER IF NOT EXISTS prevent_audit_log_update
@@ -163,7 +203,7 @@ export function initSchema(db = getDb()) {
     END;
   `);
 
-  // Seed default AI config if not present
+  // Seed default AI configs if not present
   const checkConfig = db.prepare('SELECT id, model_identifier FROM ai_config WHERE config_key = ?').get('LEAD_EXTRACTION_CONFIG');
   if (!checkConfig) {
     const defaultSchema = JSON.stringify({
@@ -208,6 +248,24 @@ export function initSchema(db = getDb()) {
     );
   } else if (checkConfig.model_identifier === 'gemini-2.5-flash') {
     db.prepare("UPDATE ai_config SET model_identifier = 'gemini-3.6-flash', updated_at = ? WHERE config_key = 'LEAD_EXTRACTION_CONFIG'").run(new Date().toISOString());
+  }
+
+  const checkDraftConfig = db.prepare('SELECT id, model_identifier FROM ai_config WHERE config_key = ?').get('RESPONSE_DRAFT_CONFIG');
+  if (!checkDraftConfig) {
+    db.prepare(`
+      INSERT INTO ai_config (id, config_key, model_identifier, prompt_template, schema_definition_json, version, is_active, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+    `).run(
+      crypto.randomUUID(),
+      'RESPONSE_DRAFT_CONFIG',
+      'gemini-3.6-flash',
+      'Genera una respuesta comercial profesional en español para NoosAdvisory basada estrictamente en hechos confirmados sin inventar precios ni compromisos.',
+      '{}',
+      '1.0.0',
+      new Date().toISOString()
+    );
+  } else if (checkDraftConfig.model_identifier === 'gemini-2.5-flash') {
+    db.prepare("UPDATE ai_config SET model_identifier = 'gemini-3.6-flash', updated_at = ? WHERE config_key = 'RESPONSE_DRAFT_CONFIG'").run(new Date().toISOString());
   }
 }
 
@@ -531,4 +589,406 @@ export function getEvidenceByExtractionId(extractionId, db = getDb()) {
 export function getEvidenceByLeadId(leadId, db = getDb()) {
   return db.prepare('SELECT * FROM lead_evidence WHERE lead_id = ? ORDER BY created_at ASC').all(leadId);
 }
+
+// Confirmed Facts repository functions (Human-in-the-loop with versioning)
+export function saveConfirmedFacts(params, db = getDb()) {
+  const {
+    leadId,
+    contactName,
+    contact_name,
+    companyName,
+    company_name,
+    contactEmail,
+    contact_email,
+    contactPhone,
+    contact_phone,
+    requestType,
+    request_type,
+    scopeSummary,
+    scope_summary,
+    urgency,
+    confirmedByUserId,
+    confirmed_by_user_id
+  } = params || {};
+
+  const lead = getLeadById(leadId, db);
+  if (!lead) {
+    const err = new Error('Lead no encontrado');
+    err.code = 'LEAD_NOT_FOUND';
+    throw err;
+  }
+
+  const cName = contactName ?? contact_name ?? null;
+  const compName = companyName ?? company_name ?? null;
+  const cEmail = contactEmail ?? contact_email ? (contactEmail ?? contact_email).toLowerCase().trim() : null;
+  const cPhone = contactPhone ?? contact_phone ?? null;
+  const rType = requestType ?? request_type ?? 'INQUIRY';
+  const sSummary = scopeSummary ?? scope_summary ?? '';
+  const urg = urgency ?? 'MEDIUM';
+  const userId = confirmedByUserId ?? confirmed_by_user_id;
+
+  let newRecord = null;
+  let previousCurrent = null;
+  let staleDraftsCount = 0;
+
+  db.exec('BEGIN IMMEDIATE;');
+  try {
+    const now = new Date().toISOString();
+
+    // 1. Determine next sequential version for this lead
+    const maxRow = db.prepare('SELECT MAX(version) as max_v FROM lead_confirmed_facts WHERE lead_id = ?').get(leadId);
+    const nextVersion = (maxRow?.max_v || 0) + 1;
+
+    // 2. Capture previous active version for audit
+    previousCurrent = db.prepare('SELECT * FROM lead_confirmed_facts WHERE lead_id = ? AND is_current = 1').get(leadId) || null;
+
+    // 3. Mark previous versions as inactive
+    db.prepare('UPDATE lead_confirmed_facts SET is_current = 0 WHERE lead_id = ?').run(leadId);
+
+    // 4. Insert new version with is_current = 1
+    const newId = crypto.randomUUID();
+    db.prepare(`
+      INSERT INTO lead_confirmed_facts (
+        id, lead_id, version, contact_name, company_name, contact_email,
+        contact_phone, request_type, scope_summary, urgency,
+        confirmed_by_user_id, confirmed_at, is_current
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+    `).run(
+      newId,
+      leadId,
+      nextVersion,
+      cName,
+      compName,
+      cEmail,
+      cPhone,
+      rType,
+      sSummary,
+      urg,
+      userId,
+      now
+    );
+
+    newRecord = db.prepare(`
+      SELECT f.*, u.name as confirmed_by_user_name, u.email as confirmed_by_user_email
+      FROM lead_confirmed_facts f
+      JOIN users u ON f.confirmed_by_user_id = u.id
+      WHERE f.id = ?
+    `).get(newId);
+
+    // 5. Invalidate existing drafts using older facts versions to STALE in same transaction
+    const staleResult = db.prepare(`
+      UPDATE response_drafts
+      SET status = 'STALE', updated_at = ?
+      WHERE lead_id = ? AND confirmed_facts_version < ? AND status NOT IN ('STALE', 'DISCARDED')
+    `).run(now, leadId, nextVersion);
+    staleDraftsCount = staleResult.changes;
+
+    // 6. Update lead status to TRIAGED while keeping raw_text intact
+    db.prepare(`
+      UPDATE leads
+      SET status = CASE WHEN status IN ('CAPTURED', 'ANALYZED') THEN 'TRIAGED' ELSE status END,
+          sender_name = COALESCE(?, sender_name),
+          company_name = COALESCE(?, company_name),
+          sender_email = COALESCE(?, sender_email),
+          updated_at = ?
+      WHERE id = ?
+    `).run(cName, compName, cEmail, now, leadId);
+
+    // 7. Audit log entries
+    appendAuditLog({
+      leadId,
+      eventType: 'FACTS_CONFIRMED',
+      entityType: 'lead_confirmed_facts',
+      entityId: newId,
+      previousState: previousCurrent,
+      newState: newRecord,
+      actorUserId: userId
+    }, db);
+
+    if (staleDraftsCount > 0) {
+      appendAuditLog({
+        leadId,
+        eventType: 'DRAFT_MARKED_STALE',
+        entityType: 'response_drafts',
+        entityId: leadId,
+        previousState: { note: `Borradores anteriores a versión de hechos v${nextVersion}` },
+        newState: { staleCount: staleDraftsCount, newFactsVersion: nextVersion },
+        actorUserId: userId
+      }, db);
+    }
+
+    db.exec('COMMIT;');
+  } catch (err) {
+    db.exec('ROLLBACK;');
+    throw err;
+  }
+
+  return { confirmedFacts: newRecord, staleDraftsCount };
+}
+
+export function getCurrentConfirmedFactsByLeadId(leadId, db = getDb()) {
+  return db.prepare(`
+    SELECT f.*, u.name as confirmed_by_user_name, u.email as confirmed_by_user_email
+    FROM lead_confirmed_facts f
+    JOIN users u ON f.confirmed_by_user_id = u.id
+    WHERE f.lead_id = ? AND f.is_current = 1
+  `).get(leadId) || null;
+}
+
+export function getConfirmedFactsHistoryByLeadId(leadId, db = getDb()) {
+  return db.prepare(`
+    SELECT f.*, u.name as confirmed_by_user_name
+    FROM lead_confirmed_facts f
+    JOIN users u ON f.confirmed_by_user_id = u.id
+    WHERE f.lead_id = ?
+    ORDER BY f.version DESC
+  `).all(leadId);
+}
+
+// Response Drafts repository functions
+export function saveResponseDraft({
+  leadId,
+  confirmedFactsVersion,
+  modelIdentifier,
+  promptVersion = '1.0.0',
+  initialDraftText,
+  status = 'GENERATED',
+  reviewedByUserId = null
+}, db = getDb()) {
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  let draft = null;
+
+  db.exec('BEGIN IMMEDIATE;');
+  try {
+    // 1. Verify that confirmedFactsVersion is still the active current version for this lead
+    const currentFacts = db.prepare(`
+      SELECT version FROM lead_confirmed_facts 
+      WHERE lead_id = ? AND is_current = 1
+    `).get(leadId);
+
+    if (status !== 'STALE' && (!currentFacts || currentFacts.version !== confirmedFactsVersion)) {
+      // Facts changed during asynchronous generation! Persist as STALE for traceability and reject as active
+      const finalStatus = 'STALE';
+      db.prepare(`
+        INSERT INTO response_drafts (
+          id, lead_id, confirmed_facts_version, model_identifier, prompt_version,
+          initial_draft_text, edited_text, status, reviewed_by_user_id,
+          created_at, updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)
+      `).run(
+        id, leadId, confirmedFactsVersion, modelIdentifier, promptVersion,
+        initialDraftText, finalStatus, reviewedByUserId, now, now
+      );
+
+      draft = getDraftById(id, db);
+
+      appendAuditLog({
+        leadId,
+        eventType: 'DRAFT_MARKED_STALE',
+        entityType: 'response_drafts',
+        entityId: id,
+        previousState: null,
+        newState: { ...draft, race_condition_detected: true, current_facts_version: currentFacts?.version || null },
+        actorUserId: reviewedByUserId || 'SYSTEM'
+      }, db);
+
+      db.exec('COMMIT;');
+
+      const err = new Error(`Los hechos confirmados cambiaron a la versión ${currentFacts?.version || 'desconocida'} durante la generación.`);
+      err.code = 'FACTS_VERSION_CHANGED';
+      err.draft = draft;
+      err.currentVersion = currentFacts?.version || null;
+      throw err;
+    }
+
+    db.prepare(`
+      INSERT INTO response_drafts (
+        id, lead_id, confirmed_facts_version, model_identifier, prompt_version,
+        initial_draft_text, edited_text, status, reviewed_by_user_id,
+        created_at, updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)
+    `).run(
+      id, leadId, confirmedFactsVersion, modelIdentifier, promptVersion,
+      initialDraftText, status, reviewedByUserId, now, now
+    );
+
+    draft = getDraftById(id, db);
+
+    appendAuditLog({
+      leadId,
+      eventType: 'DRAFT_GENERATED',
+      entityType: 'response_drafts',
+      entityId: id,
+      previousState: null,
+      newState: draft,
+      actorUserId: reviewedByUserId || 'SYSTEM'
+    }, db);
+
+    db.exec('COMMIT;');
+  } catch (err) {
+    if (err.code !== 'FACTS_VERSION_CHANGED') {
+      try { db.exec('ROLLBACK;'); } catch {}
+    }
+    throw err;
+  }
+
+  return draft;
+}
+
+export function getDraftById(id, db = getDb()) {
+  return db.prepare(`
+    SELECT d.*, u.name as reviewed_by_user_name
+    FROM response_drafts d
+    LEFT JOIN users u ON d.reviewed_by_user_id = u.id
+    WHERE d.id = ?
+  `).get(id) || null;
+}
+
+export function getLatestDraftByLeadId(leadId, db = getDb()) {
+  return db.prepare(`
+    SELECT d.*, u.name as reviewed_by_user_name
+    FROM response_drafts d
+    LEFT JOIN users u ON d.reviewed_by_user_id = u.id
+    WHERE d.lead_id = ?
+    ORDER BY d.created_at DESC LIMIT 1
+  `).get(leadId) || null;
+}
+
+export function getDraftsHistoryByLeadId(leadId, db = getDb()) {
+  return db.prepare(`
+    SELECT d.*, u.name as reviewed_by_user_name
+    FROM response_drafts d
+    LEFT JOIN users u ON d.reviewed_by_user_id = u.id
+    WHERE d.lead_id = ?
+    ORDER BY d.created_at DESC
+  `).all(leadId);
+}
+
+export function updateResponseDraft({ draftId, leadId = null, editedText, reviewedByUserId }, db = getDb()) {
+  const current = getDraftById(draftId, db);
+  if (!current) {
+    const err = new Error('Borrador no encontrado');
+    err.code = 'DRAFT_NOT_FOUND';
+    throw err;
+  }
+  if (leadId && current.lead_id !== leadId) {
+    const err = new Error('Borrador no pertenece al lead especificado');
+    err.code = 'DRAFT_NOT_FOUND';
+    throw err;
+  }
+  if (current.status === 'STALE') {
+    const err = new Error('No se puede editar un borrador en estado STALE');
+    err.code = 'DRAFT_STALE';
+    throw err;
+  }
+
+  const now = new Date().toISOString();
+  db.prepare(`
+    UPDATE response_drafts
+    SET edited_text = ?, status = 'EDITED', reviewed_by_user_id = ?, updated_at = ?
+    WHERE id = ?
+  `).run(editedText, reviewedByUserId, now, draftId);
+
+  const updated = getDraftById(draftId, db);
+
+  appendAuditLog({
+    leadId: current.lead_id,
+    eventType: 'DRAFT_EDITED',
+    entityType: 'response_drafts',
+    entityId: draftId,
+    previousState: current,
+    newState: updated,
+    actorUserId: reviewedByUserId
+  }, db);
+
+  return updated;
+}
+
+export function markDraftCopied({ draftId, leadId = null, reviewedByUserId }, db = getDb()) {
+  const current = getDraftById(draftId, db);
+  if (!current) {
+    const err = new Error('Borrador no encontrado');
+    err.code = 'DRAFT_NOT_FOUND';
+    throw err;
+  }
+  if (leadId && current.lead_id !== leadId) {
+    const err = new Error('Borrador no pertenece al lead especificado');
+    err.code = 'DRAFT_NOT_FOUND';
+    throw err;
+  }
+  if (current.status === 'STALE') {
+    const err = new Error('No se puede copiar un borrador en estado STALE');
+    err.code = 'DRAFT_STALE';
+    throw err;
+  }
+
+  const now = new Date().toISOString();
+  db.prepare(`
+    UPDATE response_drafts
+    SET status = 'APPROVED_COPIED', reviewed_by_user_id = ?, updated_at = ?
+    WHERE id = ?
+  `).run(reviewedByUserId, now, draftId);
+
+  const updated = getDraftById(draftId, db);
+
+  appendAuditLog({
+    leadId: current.lead_id,
+    eventType: 'DRAFT_COPIED',
+    entityType: 'response_drafts',
+    entityId: draftId,
+    previousState: current,
+    newState: updated,
+    actorUserId: reviewedByUserId
+  }, db);
+
+  return updated;
+}
+
+// Master Triage list query with related statuses
+export function listLeadsWithTriageSummary({ limit = 50, offset = 0, status = null, search = null } = {}, db = getDb()) {
+  let query = `
+    SELECT l.*,
+           e.status as extraction_status,
+           e.confidence_score as extraction_confidence,
+           f.version as confirmed_facts_version,
+           d.status as draft_status,
+           d.confirmed_facts_version as draft_facts_version
+    FROM leads l
+    LEFT JOIN lead_extractions e ON e.id = (
+      SELECT id FROM lead_extractions WHERE lead_id = l.id ORDER BY created_at DESC LIMIT 1
+    )
+    LEFT JOIN lead_confirmed_facts f ON f.id = (
+      SELECT id FROM lead_confirmed_facts WHERE lead_id = l.id AND is_current = 1 LIMIT 1
+    )
+    LEFT JOIN response_drafts d ON d.id = (
+      SELECT id FROM response_drafts WHERE lead_id = l.id ORDER BY created_at DESC LIMIT 1
+    )
+  `;
+  const conditions = [];
+  const params = [];
+
+  if (status) {
+    conditions.push('l.status = ?');
+    params.push(status);
+  }
+  if (search) {
+    conditions.push('(l.company_name LIKE ? OR l.sender_name LIKE ? OR l.sender_email LIKE ? OR l.raw_text LIKE ?)');
+    const term = `%${search.trim()}%`;
+    params.push(term, term, term, term);
+  }
+
+  if (conditions.length > 0) {
+    query += ' WHERE ' + conditions.join(' AND ');
+  }
+
+  query += ' ORDER BY l.created_at DESC LIMIT ? OFFSET ?';
+  params.push(limit, offset);
+
+  return db.prepare(query).all(...params);
+}
+
 

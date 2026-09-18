@@ -38,33 +38,33 @@ integrations:
     state: DEFERRED
 changes:
   - id: CHG-001
-    status: IMPLEMENTING
+    status: PENDING_VALIDATION
     owner: ORCHESTRATOR_PM
 environments:
   - logical_name: DEV
     physical_target: "http://localhost:3000"
-    version: "v0.2.0-dev (TP-02 complete & empirically validated with Gemini real)"
+    version: "v0.3.0-dev (TP-03 implementation complete, 32/32 tests PASS, awaiting Gemini quota reset for browser validation)"
     protection: UNPROTECTED
-    validation: "Pass (npm test: 19/19 tests PASS, unit + mocks + validación empírica integral en ruta POST /api/leads PASS)"
+    validation: "Pass (npm test: 32/32 tests PASS, 100% suites unit + integration + blackbox PASS)"
   - logical_name: STAGE_GCP
     physical_target: "Google Cloud Run"
     version: null
     protection: PROTECTED
     validation: "DEFERRED"
 quality:
-  empirical_validation: PASS
+  empirical_validation: BLOCKED_BY_GEMINI_QUOTA
   qa: IN_PROGRESS
   regression: PASS
   release_gate: NOT_EVALUATED
 authorization:
-  implementation_scope: "TP-02 — Ingesta de Solicitudes, Idempotencia y Motor de Extracción con IA Gemini Real (COMPLETADO Y VALIDADO)"
+  implementation_scope: "TP-03 — Triage UI Master-Detail, Hechos Confirmados y Borradores con Estado STALE (PENDIENTE VALIDACIÓN)"
   authorized_by: "Sponsor (Miguel Ulloa)"
-  authorized_at: "2026-09-17T11:44:55-03:00"
+  authorized_at: "2026-09-17T13:43:54-03:00"
   expires_on_scope_change: true
 next_action:
-  sponsor: "Revisar evidencia durable de TP-02 (EV-TP-02.md, PASS con Gemini real y 19/19 tests) y evaluar autorización para TP-03"
-  internal: AWAITING_IMPLEMENTATION_APPROVAL_TP_03
+  sponsor: "Revisar bloqueo de cuota de Gemini 3.6 Flash (límite free tier de 20 req/día agotado) para completar validación de navegador en TP-03"
+  internal: PENDING_VALIDATION_TP_03
 dashboard:
   sync_status: SYNCED
-  last_synced_at: "2026-09-17T11:51:00-03:00"
+  last_synced_at: "2026-09-18T00:35:00-03:00"
 

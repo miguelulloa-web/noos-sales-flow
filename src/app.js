@@ -1,5 +1,8 @@
 import express from 'express';
 import cookieParser from 'cookie-parser';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import crypto from 'node:crypto';
 import { 
   SESSION_COOKIE_NAME, 
   generateSessionToken, 
@@ -25,6 +28,16 @@ import {
   createLeadEvidenceBatch,
   getEvidenceByExtractionId,
   getEvidenceByLeadId,
+  saveConfirmedFacts,
+  getCurrentConfirmedFactsByLeadId,
+  getConfirmedFactsHistoryByLeadId,
+  saveResponseDraft,
+  getDraftById,
+  getLatestDraftByLeadId,
+  getDraftsHistoryByLeadId,
+  updateResponseDraft,
+  markDraftCopied,
+  listLeadsWithTriageSummary,
   getDb
 } from './db.js';
 import { 
@@ -34,11 +47,17 @@ import {
   requireRole 
 } from './middleware.js';
 import { extractLeadData, resolveEffectiveModel } from './extraction.js';
-import crypto from 'node:crypto';
+import { generateCommercialDraft } from './draft_generation.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export function createApp(options = {}) {
   const app = express();
   const fetchFn = options.fetchFn || fetch;
+
+  // Serve static assets from public/ directory
+  app.use(express.static(path.join(__dirname, '..', 'public')));
 
   // Basic parsers
   app.use(express.json());
@@ -436,7 +455,18 @@ export function createApp(options = {}) {
     });
   });
 
-  // Leads: Get Lead by ID with Extraction and Evidence
+  // Leads: Master List for Triage
+  app.get('/api/leads', requireAuth, (req, res) => {
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+    const status = req.query.status || null;
+    const search = req.query.search || null;
+
+    const leads = listLeadsWithTriageSummary({ limit, offset, status, search });
+    return res.json({ leads });
+  });
+
+  // Leads: Get Lead by ID with Extraction, Evidence, Confirmed Facts, and Drafts
   app.get('/api/leads/:id', requireAuth, (req, res) => {
     const lead = getLeadById(req.params.id);
     if (!lead) {
@@ -445,12 +475,225 @@ export function createApp(options = {}) {
 
     const extraction = getLatestExtractionByLeadId(lead.id);
     const evidence = extraction ? getEvidenceByExtractionId(extraction.id) : [];
+    const currentConfirmedFacts = getCurrentConfirmedFactsByLeadId(lead.id);
+    const confirmedFactsHistory = getConfirmedFactsHistoryByLeadId(lead.id);
+    const currentDraft = getLatestDraftByLeadId(lead.id);
+    const draftsHistory = getDraftsHistoryByLeadId(lead.id);
 
     return res.json({
       lead,
       extraction,
-      evidence
+      evidence,
+      current_confirmed_facts: currentConfirmedFacts,
+      confirmed_facts_history: confirmedFactsHistory,
+      current_draft: currentDraft,
+      drafts_history: draftsHistory
     });
+  });
+
+  // Confirmed Facts: Save and version confirmed facts (atomically invalidates older drafts to STALE)
+  app.post('/api/leads/:id/confirmed-facts', requireAuth, (req, res) => {
+    const leadId = req.params.id;
+    const lead = getLeadById(leadId);
+    if (!lead) {
+      return res.status(404).json({ error: 'Lead no encontrado' });
+    }
+
+    const {
+      contact_name,
+      company_name,
+      contact_email,
+      contact_phone,
+      request_type,
+      scope_summary,
+      urgency
+    } = req.body || {};
+
+    const validRequestTypes = ['QUOTE', 'INQUIRY', 'DEMO', 'OTHER'];
+    if (!request_type || !validRequestTypes.includes(request_type)) {
+      return res.status(400).json({ 
+        error: `request_type inválido. Debe ser uno de: ${validRequestTypes.join(', ')}`,
+        code: 'INVALID_REQUEST_TYPE'
+      });
+    }
+
+    if (!scope_summary || typeof scope_summary !== 'string' || scope_summary.trim().length < 3) {
+      return res.status(400).json({
+        error: 'scope_summary es requerido y debe tener al menos 3 caracteres',
+        code: 'INVALID_SCOPE_SUMMARY'
+      });
+    }
+
+    const validUrgencies = ['LOW', 'MEDIUM', 'HIGH'];
+    if (!urgency || !validUrgencies.includes(urgency)) {
+      return res.status(400).json({
+        error: `urgency inválida. Debe ser una de: ${validUrgencies.join(', ')}`,
+        code: 'INVALID_URGENCY'
+      });
+    }
+
+    try {
+      const result = saveConfirmedFacts({
+        leadId,
+        contactName: contact_name ? contact_name.trim() : null,
+        companyName: company_name ? company_name.trim() : null,
+        contactEmail: contact_email ? contact_email.trim() : null,
+        contactPhone: contact_phone ? contact_phone.trim() : null,
+        requestType: request_type,
+        scopeSummary: scope_summary.trim(),
+        urgency,
+        confirmedByUserId: req.user.id
+      });
+
+      return res.status(201).json({
+        confirmed_facts: result.confirmedFacts,
+        stale_drafts_count: result.staleDraftsCount
+      });
+    } catch (err) {
+      console.error('Error al guardar hechos confirmados:', err);
+      return res.status(500).json({ error: err.message, code: 'SAVE_FAILED' });
+    }
+  });
+
+  // Drafts: Generate commercial response draft based exclusively on confirmed facts
+  app.post('/api/leads/:id/drafts/generate', requireAuth, async (req, res) => {
+    const leadId = req.params.id;
+    const lead = getLeadById(leadId);
+    if (!lead) {
+      return res.status(404).json({ error: 'Lead no encontrado' });
+    }
+
+    const currentFacts = getCurrentConfirmedFactsByLeadId(leadId);
+    if (!currentFacts) {
+      return res.status(400).json({
+        error: 'No se puede generar borrador sin hechos confirmados vigentes',
+        code: 'NO_CONFIRMED_FACTS'
+      });
+    }
+
+    try {
+      const result = await generateCommercialDraft({
+        confirmedFacts: currentFacts,
+        fetchFn,
+        db: getDb()
+      });
+
+      const savedDraft = saveResponseDraft({
+        leadId,
+        confirmedFactsVersion: currentFacts.version,
+        modelIdentifier: result.modelIdentifier,
+        promptVersion: result.promptVersion,
+        initialDraftText: result.draftText,
+        status: 'GENERATED',
+        reviewedByUserId: req.user.id
+      });
+
+      return res.status(201).json({
+        draft: savedDraft,
+        latency_ms: result.latencyMs,
+        retry_count: result.retryCount
+      });
+    } catch (err) {
+      if (err.code === 'FACTS_VERSION_CHANGED') {
+        return res.status(409).json({
+          error: 'Los hechos confirmados cambiaron durante la generación. El borrador quedó en estado STALE; por favor regenere.',
+          code: 'FACTS_VERSION_CHANGED',
+          draft: err.draft,
+          current_version: err.currentVersion
+        });
+      }
+      if (err.code === 'NO_CONFIRMED_FACTS') {
+        return res.status(400).json({ error: err.message, code: 'NO_CONFIRMED_FACTS' });
+      }
+      if (err.code === 'BLOCKED_BY_CREDENTIAL') {
+        return res.status(503).json({
+          error: 'Servicio de generación de borrador no disponible: credencial no configurada',
+          code: 'BLOCKED_BY_CREDENTIAL'
+        });
+      }
+      if (err.code === 'QUOTA_EXCEEDED') {
+        return res.status(429).json({
+          error: 'Cuota de Google Gemini API agotada (HTTP 429)',
+          code: 'QUOTA_EXCEEDED'
+        });
+      }
+      if (err.code === 'TIMEOUT') {
+        return res.status(504).json({
+          error: 'Tiempo de espera agotado al generar el borrador con la IA',
+          code: 'TIMEOUT'
+        });
+      }
+      return res.status(502).json({
+        error: `Fallo al generar borrador con IA: ${err.message}`,
+        code: err.code || 'DRAFT_GENERATION_FAILED'
+      });
+    }
+  });
+
+  // Drafts: Manual edition of response draft
+  app.patch('/api/leads/:id/drafts/:draftId', requireAuth, (req, res) => {
+    const leadId = req.params.id;
+    const { draftId } = req.params;
+    const { edited_text } = req.body || {};
+
+    if (typeof edited_text !== 'string' || !edited_text.trim()) {
+      return res.status(400).json({
+        error: 'edited_text es requerido',
+        code: 'INVALID_EDITED_TEXT'
+      });
+    }
+
+    try {
+      const updated = updateResponseDraft({
+        draftId,
+        leadId,
+        editedText: edited_text.trim(),
+        reviewedByUserId: req.user.id
+      });
+
+      return res.json({ draft: updated });
+    } catch (err) {
+      if (err.code === 'DRAFT_NOT_FOUND') {
+        return res.status(404).json({ error: err.message, code: 'DRAFT_NOT_FOUND' });
+      }
+      if (err.code === 'DRAFT_STALE') {
+        return res.status(409).json({
+          error: 'No se puede editar un borrador en estado STALE',
+          code: 'DRAFT_STALE'
+        });
+      }
+      return res.status(500).json({ error: err.message, code: 'UPDATE_FAILED' });
+    }
+  });
+
+  // Drafts: Register draft copied to clipboard (strictly forbidden if STALE)
+  app.post('/api/leads/:id/drafts/:draftId/copy', requireAuth, (req, res) => {
+    const leadId = req.params.id;
+    const { draftId } = req.params;
+
+    try {
+      const updated = markDraftCopied({
+        draftId,
+        leadId,
+        reviewedByUserId: req.user.id
+      });
+
+      return res.json({
+        status: 'ok',
+        draft: updated
+      });
+    } catch (err) {
+      if (err.code === 'DRAFT_NOT_FOUND') {
+        return res.status(404).json({ error: err.message, code: 'DRAFT_NOT_FOUND' });
+      }
+      if (err.code === 'DRAFT_STALE') {
+        return res.status(409).json({
+          error: 'Borrador desactualizado (STALE) no puede ser copiado',
+          code: 'DRAFT_STALE'
+        });
+      }
+      return res.status(500).json({ error: err.message, code: 'COPY_FAILED' });
+    }
   });
 
   // 404 handler
@@ -466,3 +709,4 @@ export function createApp(options = {}) {
 
   return app;
 }
+
