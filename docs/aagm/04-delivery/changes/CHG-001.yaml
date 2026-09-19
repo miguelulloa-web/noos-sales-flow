@@ -3,8 +3,8 @@ requirement: "MVP de Captura y Seguimiento Comercial con IA para NoosAdvisory ba
 modality: MUST
 type: MODIFICATION
 priority: HIGH
-status: PENDING_VALIDATION
-current_stage: PENDING_VALIDATION
+status: IMPLEMENTING
+current_stage: IMPLEMENTING
 owner: ORCHESTRATOR_PM
 decision_refs:
   - "Ruta A aprobada por Sponsor (2026-09-14)"
@@ -17,7 +17,7 @@ approvals:
 task_packets:
   - TP-01 (DONE)
   - TP-02 (DONE)
-  - TP-03 (PENDING_VALIDATION)
+  - TP-03 (DONE)
   - TP-04 (DRAFT)
   - TP-05 (DRAFT)
 commits_or_prs:
@@ -27,13 +27,18 @@ commits_or_prs:
   - "8397b15 (feat(leads): implement TP-02 ingestion, idempotency, and Gemini extraction engine)"
   - "d6ae696 (docs(delivery): register EV-TP-02 and sync project state to PENDING_VALIDATION)"
   - "0df44c3 (fix(leads): harden verify_real_gemini cleanup and assertions, persist retry_count, and remove orphan timer)"
+  - "098e995 (feat(triage): checkpoint TP-03 triage UI, facts versioning, STALE drafts, and race protection)"
+  - "499dd38 (fix(drafts): increase default timeout to 45s for Gemini generative draft)"
+  - "218111d (fix(empirical): tune draft timeout to 60s and spacing before draft v2)"
+  - "80ee9a4 (fix(drafts): increase retry count and delay on transient 503 for empirical test)"
 evidence:
   - "docs/aagm/02-solution-design/EV-003-solution-design.md"
   - "docs/aagm/03-planning/EV-004-planning.md"
   - "docs/aagm/04-delivery/evidence/EV-TP-01.md"
   - "docs/aagm/04-delivery/evidence/EV-TP-02.md"
+  - "docs/aagm/04-delivery/evidence/EV-TP-03.md"
 qa_ref: null
 release: null
 environment: DEV
 production_validation_ref: null
-next_action: "Implementar y validar alcance de TP-03 (Triage UI Master-Detail, Hechos Confirmados y Borradores STALE)"
+next_action: "Presentar cierre de TP-03 al Sponsor y solicitar autorización formal para TP-04 (Seguimiento, Vencimientos y Exportación)"

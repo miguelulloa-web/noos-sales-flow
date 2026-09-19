@@ -20,6 +20,7 @@ transition:
     - "docs/aagm/03-planning/EV-004-planning.md"
     - "docs/aagm/04-delivery/evidence/EV-TP-01.md"
     - "docs/aagm/04-delivery/evidence/EV-TP-02.md"
+    - "docs/aagm/04-delivery/evidence/EV-TP-03.md"
   recorded_at: "2026-09-16T11:40:00-03:00"
 readiness:
   delivery: IN_PROGRESS
@@ -27,7 +28,7 @@ readiness:
 integrations:
   - name: "Google Gemini API (gemini-3.6-flash)"
     state: VALIDATED
-    notes: "Invocación empírica real PASS a través de la ruta de aplicación POST /api/leads (6 citas verificadas con substring verification, idempotencia validada con X-Idempotent-Replay)"
+    notes: "Invocación empírica real PASS en extracción (TP-02) y en generación/regeneración de borradores supervisados (TP-03)"
   - name: "SQLite Database Engine (DEV Local)"
     state: VALIDATED
   - name: "Google Cloud Run"
@@ -38,33 +39,33 @@ integrations:
     state: DEFERRED
 changes:
   - id: CHG-001
-    status: PENDING_VALIDATION
+    status: IMPLEMENTING
     owner: ORCHESTRATOR_PM
 environments:
   - logical_name: DEV
     physical_target: "http://localhost:3000"
-    version: "v0.3.0-dev (TP-03 implementation complete, 32/32 tests PASS, awaiting Gemini quota reset for browser validation)"
+    version: "v0.3.0-dev (TP-03 complete, 37/37 tests PASS, empirical and real browser validation PASS)"
     protection: UNPROTECTED
-    validation: "Pass (npm test: 32/32 tests PASS, 100% suites unit + integration + blackbox PASS)"
+    validation: "Pass (npm test: 37/37 tests PASS, verify_real_tp03.js PASS, Chromium browser validation PASS)"
   - logical_name: STAGE_GCP
     physical_target: "Google Cloud Run"
     version: null
     protection: PROTECTED
     validation: "DEFERRED"
 quality:
-  empirical_validation: BLOCKED_BY_GEMINI_QUOTA
-  qa: IN_PROGRESS
+  empirical_validation: PASS
+  qa: PASS
   regression: PASS
   release_gate: NOT_EVALUATED
 authorization:
-  implementation_scope: "TP-03 — Triage UI Master-Detail, Hechos Confirmados y Borradores con Estado STALE (PENDIENTE VALIDACIÓN)"
+  implementation_scope: "TP-03 — Triage UI Master-Detail, Hechos Confirmados y Borradores con Estado STALE (COMPLETADO)"
   authorized_by: "Sponsor (Miguel Ulloa)"
   authorized_at: "2026-09-17T13:43:54-03:00"
   expires_on_scope_change: true
 next_action:
-  sponsor: "Revisar bloqueo de cuota de Gemini 3.6 Flash (límite free tier de 20 req/día agotado) para completar validación de navegador en TP-03"
-  internal: PENDING_VALIDATION_TP_03
+  sponsor: "Revisar evidencia EV-TP-03 y autorizar inicio de TP-04 (Gestión Comercial, Bandeja de Vencimientos, Exportación CSV/JSON y Resiliencia)"
+  internal: AWAITING_TP04_AUTHORIZATION
 dashboard:
   sync_status: SYNCED
-  last_synced_at: "2026-09-18T00:35:00-03:00"
+  last_synced_at: "2026-09-18T22:25:00-03:00"
 
