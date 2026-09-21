@@ -18,7 +18,7 @@ task_packets:
   - TP-01 (DONE)
   - TP-02 (DONE)
   - TP-03 (DONE)
-  - TP-04 (DRAFT)
+  - TP-04 (READY)
   - TP-05 (DRAFT)
 commits_or_prs:
   - "8f214f5 (feat: implement TP-01 local foundation, persistence, auth and audit log)"

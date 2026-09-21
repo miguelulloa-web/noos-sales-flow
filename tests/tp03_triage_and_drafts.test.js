@@ -26,6 +26,7 @@ import {
 import { generateSessionToken, hashSessionToken } from '../src/auth.js';
 import { createApp } from '../src/app.js';
 import { generateCommercialDraft, DRAFT_SYSTEM_PROMPT, resolveDraftModel, AUTHORIZED_DRAFT_MODEL } from '../src/draft_generation.js';
+import { executeDraftCopy } from '../public/clipboard_workflow.js';
 import { Readable, PassThrough } from 'node:stream';
 import { EventEmitter } from 'node:events';
 
@@ -512,15 +513,24 @@ test('TP-03: 10. Bloqueo de copia para borradores en estado STALE (HTTP 409)', a
 
     const app = createApp();
 
-    const res = await invokeApp(app, {
+    // 1. copy-authorize rechaza borrador STALE con 409
+    const resAuth = await invokeApp(app, {
       method: 'POST',
-      url: `/api/leads/${lead.id}/drafts/${draft.id}/copy`,
+      url: `/api/leads/${lead.id}/drafts/${draft.id}/copy-authorize`,
       headers: { cookie: env.cookie }
     });
+    assert.equal(resAuth.status, 409);
+    assert.equal(resAuth.body.code, 'DRAFT_STALE');
 
-    assert.equal(res.status, 409);
-    assert.equal(res.body.code, 'DRAFT_STALE');
-    assert.ok(res.body.error.includes('STALE'));
+    // 2. copy-confirm también rechaza borrador STALE con 409
+    const resConfirm = await invokeApp(app, {
+      method: 'POST',
+      url: `/api/leads/${lead.id}/drafts/${draft.id}/copy-confirm`,
+      headers: { cookie: env.cookie }
+    });
+    assert.equal(resConfirm.status, 409);
+    assert.equal(resConfirm.body.code, 'DRAFT_STALE');
+    assert.ok(resConfirm.body.error.includes('STALE'));
   } finally {
     cleanupTestEnv(env.dbPath);
   }
@@ -564,10 +574,10 @@ test('TP-03: 11. Edición manual del borrador y trazabilidad de cambios', async 
     assert.equal(resEdit.body.draft.status, 'EDITED');
     assert.equal(resEdit.body.draft.edited_text, 'Texto ajustado manualmente por el consultor humano.');
 
-    // 2. Copia del borrador editado (permitida porque no es STALE)
+    // 2. Copia del borrador editado (permitida mediante copy-confirm porque no es STALE)
     const resCopy = await invokeApp(app, {
       method: 'POST',
-      url: `/api/leads/${lead.id}/drafts/${draft.id}/copy`,
+      url: `/api/leads/${lead.id}/drafts/${draft.id}/copy-confirm`,
       headers: { cookie: env.cookie }
     });
 
@@ -747,10 +757,10 @@ test('TP-03: 15. Integridad referencial: PATCH y COPY con draft perteneciente a 
     assert.equal(resPatchWrong.status, 404);
     assert.equal(resPatchWrong.body.code, 'DRAFT_NOT_FOUND');
 
-    // 2. Intento de COPY borrador de Lead A usando URL de Lead B
+    // 2. Intento de COPY borrador de Lead A usando URL de Lead B (debe retornar 404 sin mutar ni auditar)
     const resCopyWrong = await invokeApp(app, {
       method: 'POST',
-      url: `/api/leads/${leadB.id}/drafts/${draftA.id}/copy`,
+      url: `/api/leads/${leadB.id}/drafts/${draftA.id}/copy-confirm`,
       headers: { cookie: env.cookie, origin: 'http://localhost:3000' }
     });
 
@@ -827,15 +837,270 @@ test('TP-03: 18. Secuencia de copia segura: endpoint rechaza borrador STALE con 
     saveConfirmedFacts({ leadId: lead.id, scope_summary: 'Facts 2', requestType: 'QUOTE', urgency: 'LOW', confirmedByUserId: env.testUser.id }, env.db);
 
     const app = createApp();
-    const resCopy = await invokeApp(app, {
+
+    // 1. copy-authorize rechaza con 409 DRAFT_STALE
+    const resCopyAuth = await invokeApp(app, {
+      method: 'POST',
+      url: `/api/leads/${lead.id}/drafts/${draft.id}/copy-authorize`,
+      headers: { cookie: env.cookie, origin: 'http://localhost:3000' }
+    });
+
+    assert.equal(resCopyAuth.status, 409);
+    assert.equal(resCopyAuth.body.code, 'DRAFT_STALE');
+
+    // 2. Endpoint antiguo /copy responde 410 ENDPOINT_DEPRECATED
+    const resOldCopy = await invokeApp(app, {
       method: 'POST',
       url: `/api/leads/${lead.id}/drafts/${draft.id}/copy`,
       headers: { cookie: env.cookie, origin: 'http://localhost:3000' }
     });
 
-    assert.equal(resCopy.status, 409);
-    assert.equal(resCopy.body.code, 'DRAFT_STALE');
+    assert.equal(resOldCopy.status, 410);
+    assert.equal(resOldCopy.body.code, 'ENDPOINT_DEPRECATED');
   } finally {
     cleanupTestEnv(env.dbPath);
   }
 });
+
+// 19. Endpoints copy-authorize y copy-confirm
+test('TP-03: 19. Endpoints copy-authorize y copy-confirm: authorize valida sin auditar DRAFT_COPIED, rechaza STALE/409 y mismatch/404; confirm audita DRAFT_COPIED', async () => {
+  const env = setupTestEnv();
+  try {
+    const leadA = createSampleLead(env);
+    const leadB = createSampleLead(env, 'lead-b-idemp');
+    saveConfirmedFacts({ leadId: leadA.id, scope_summary: 'Facts A', requestType: 'QUOTE', urgency: 'LOW', confirmedByUserId: env.testUser.id }, env.db);
+    const draftA = saveResponseDraft({ leadId: leadA.id, confirmedFactsVersion: 1, modelIdentifier: 'gemini-3.6-flash', initialDraftText: 'Texto A', reviewedByUserId: env.testUser.id }, env.db);
+
+    const app = createApp();
+
+    // A) Mismatch de lead -> 404 sin auditar
+    const resMismatchAuth = await invokeApp(app, {
+      method: 'POST',
+      url: `/api/leads/${leadB.id}/drafts/${draftA.id}/copy-authorize`,
+      headers: { cookie: env.cookie, origin: 'http://localhost:3000' }
+    });
+    assert.equal(resMismatchAuth.status, 404);
+
+    const resMismatchConf = await invokeApp(app, {
+      method: 'POST',
+      url: `/api/leads/${leadB.id}/drafts/${draftA.id}/copy-confirm`,
+      headers: { cookie: env.cookie, origin: 'http://localhost:3000' }
+    });
+    assert.equal(resMismatchConf.status, 404);
+
+    // B) copy-authorize en borrador vigente -> 200 OK y NO audita DRAFT_COPIED
+    const resAuth = await invokeApp(app, {
+      method: 'POST',
+      url: `/api/leads/${leadA.id}/drafts/${draftA.id}/copy-authorize`,
+      headers: { cookie: env.cookie, origin: 'http://localhost:3000' }
+    });
+    assert.equal(resAuth.status, 200);
+    assert.equal(resAuth.body.authorized, true);
+
+    const logsBefore = getAuditLogs({ limit: 50 }, env.db);
+    assert.equal(logsBefore.filter(l => l.event_type === 'DRAFT_COPIED').length, 0, 'copy-authorize NO debe registrar DRAFT_COPIED');
+
+    // C) copy-confirm en borrador vigente -> 200 OK y SÍ audita DRAFT_COPIED
+    const resConf = await invokeApp(app, {
+      method: 'POST',
+      url: `/api/leads/${leadA.id}/drafts/${draftA.id}/copy-confirm`,
+      headers: { cookie: env.cookie, origin: 'http://localhost:3000' }
+    });
+    assert.equal(resConf.status, 200);
+    assert.equal(resConf.body.draft.status, 'APPROVED_COPIED');
+
+    const logsAfter = getAuditLogs({ limit: 50 }, env.db);
+    assert.equal(logsAfter.filter(l => l.event_type === 'DRAFT_COPIED').length, 1, 'copy-confirm SÍ debe registrar DRAFT_COPIED');
+
+    // D) Si el borrador pasa a STALE, copy-authorize y copy-confirm deben responder 409 DRAFT_STALE
+    saveConfirmedFacts({ leadId: leadA.id, scope_summary: 'Facts A v2', requestType: 'QUOTE', urgency: 'LOW', confirmedByUserId: env.testUser.id }, env.db);
+
+    const resStaleAuth = await invokeApp(app, {
+      method: 'POST',
+      url: `/api/leads/${leadA.id}/drafts/${draftA.id}/copy-authorize`,
+      headers: { cookie: env.cookie, origin: 'http://localhost:3000' }
+    });
+    assert.equal(resStaleAuth.status, 409);
+    assert.equal(resStaleAuth.body.code, 'DRAFT_STALE');
+
+    const resStaleConf = await invokeApp(app, {
+      method: 'POST',
+      url: `/api/leads/${leadA.id}/drafts/${draftA.id}/copy-confirm`,
+      headers: { cookie: env.cookie, origin: 'http://localhost:3000' }
+    });
+    assert.equal(resStaleConf.status, 409);
+    assert.equal(resStaleConf.body.code, 'DRAFT_STALE');
+  } finally {
+    cleanupTestEnv(env.dbPath);
+  }
+});
+
+// 20. Flujo cliente de tres escenarios de portapapeles
+test('TP-03: 20. Semántica de portapapeles en cliente (éxito, API ausente y rechazo de writeText)', async () => {
+  const env = setupTestEnv();
+  try {
+    const lead = createSampleLead(env);
+    saveConfirmedFacts({ leadId: lead.id, scope_summary: 'Facts 1', requestType: 'QUOTE', urgency: 'LOW', confirmedByUserId: env.testUser.id }, env.db);
+    const draft = saveResponseDraft({ leadId: lead.id, confirmedFactsVersion: 1, modelIdentifier: 'gemini-3.6-flash', initialDraftText: 'Borrador para cliente', reviewedByUserId: env.testUser.id }, env.db);
+
+    const app = createApp();
+    const fakeApiReq = async (endpoint, opts) => {
+      const res = await invokeApp(app, {
+        method: opts.method || 'GET',
+        url: endpoint,
+        body: opts.body,
+        headers: { cookie: env.cookie, origin: 'http://localhost:3000' }
+      });
+      return {
+        ok: res.status >= 200 && res.status < 300,
+        status: res.status,
+        data: res.body
+      };
+    };
+
+    // Escenario 1: Éxito con writeText
+    let clipboardWritten = '';
+    const toasts = [];
+    const mockClipboardSuccess = {
+      writeText: async (text) => {
+        clipboardWritten = text;
+      }
+    };
+
+    const res1 = await executeDraftCopy({
+      leadId: lead.id,
+      draft,
+      textToCopy: 'Texto copiado con éxito',
+      clipboardApi: mockClipboardSuccess,
+      apiReq: fakeApiReq,
+      onToast: (msg) => toasts.push(msg)
+    });
+
+    assert.equal(res1.success, true);
+    assert.equal(clipboardWritten, 'Texto copiado con éxito');
+    assert.ok(toasts.some(t => t.includes('Borrador verificado y copiado')));
+
+    const logsAfterSuccess = getAuditLogs({ limit: 50 }, env.db);
+    const copyAuditCount = logsAfterSuccess.filter(l => l.event_type === 'DRAFT_COPIED').length;
+    assert.equal(copyAuditCount, 1, 'Debe existir exactamente 1 registro DRAFT_COPIED tras éxito');
+
+    // Preparar un nuevo borrador para probar fallos
+    const draft2 = saveResponseDraft({ leadId: lead.id, confirmedFactsVersion: 1, modelIdentifier: 'gemini-3.6-flash', initialDraftText: 'Borrador 2', reviewedByUserId: env.testUser.id }, env.db);
+
+    // Escenario 2: API de portapapeles ausente
+    const toastsNoApi = [];
+    const resNoApi = await executeDraftCopy({
+      leadId: lead.id,
+      draft: draft2,
+      textToCopy: 'Texto sin api',
+      clipboardApi: null, // ausente
+      apiReq: fakeApiReq,
+      onToast: (msg) => toastsNoApi.push(msg)
+    });
+
+    assert.equal(resNoApi.success, false);
+    assert.equal(resNoApi.reason, 'CLIPBOARD_API_UNAVAILABLE');
+    assert.ok(toastsNoApi.some(t => t.includes('API de portapapeles no está disponible')));
+
+    const logsAfterNoApi = getAuditLogs({ limit: 50 }, env.db);
+    assert.equal(logsAfterNoApi.filter(l => l.event_type === 'DRAFT_COPIED').length, 1, 'No debe aumentarse DRAFT_COPIED si la API de portapapeles no está disponible');
+
+    // Escenario 3: Rechazo de writeText (NotAllowedError / permiso denegado)
+    const toastsReject = [];
+    const mockClipboardReject = {
+      writeText: async () => {
+        const err = new Error('Permission denied by user');
+        err.name = 'NotAllowedError';
+        throw err;
+      }
+    };
+
+    const resReject = await executeDraftCopy({
+      leadId: lead.id,
+      draft: draft2,
+      textToCopy: 'Texto con rechazo',
+      clipboardApi: mockClipboardReject,
+      apiReq: fakeApiReq,
+      onToast: (msg) => toastsReject.push(msg)
+    });
+
+    assert.equal(resReject.success, false);
+    assert.equal(resReject.reason, 'CLIPBOARD_WRITE_FAILED');
+    assert.ok(toastsReject.some(t => t.includes('Error al escribir en el portapapeles')));
+
+    const logsAfterReject = getAuditLogs({ limit: 50 }, env.db);
+    assert.equal(logsAfterReject.filter(l => l.event_type === 'DRAFT_COPIED').length, 1, 'No debe aumentarse DRAFT_COPIED si writeText fue rechazado');
+
+    // Escenario 4: Autorización 409 (STALE) -> NUNCA llama a writeText
+    saveConfirmedFacts({ leadId: lead.id, scope_summary: 'Facts 3', requestType: 'QUOTE', urgency: 'LOW', confirmedByUserId: env.testUser.id }, env.db);
+    let writeCalledForStale = false;
+    const mockClipboardStale = {
+      writeText: async () => {
+        writeCalledForStale = true;
+      }
+    };
+    const toastsStale = [];
+    const resStale = await executeDraftCopy({
+      leadId: lead.id,
+      draft: draft2, // Ahora es STALE porque Facts 3 es la versión vigente
+      textToCopy: 'Texto stale',
+      clipboardApi: mockClipboardStale,
+      apiReq: fakeApiReq,
+      onToast: (msg) => toastsStale.push(msg)
+    });
+    assert.equal(resStale.success, false);
+    assert.equal(writeCalledForStale, false, 'NUNCA debe llamarse a writeText si el borrador es STALE');
+
+    // Escenario 5: Confirmación fallida tras copia -> informa error sin afirmar éxito
+    const draft3 = saveResponseDraft({ leadId: lead.id, confirmedFactsVersion: 2, modelIdentifier: 'gemini-3.6-flash', initialDraftText: 'Borrador 3', reviewedByUserId: env.testUser.id }, env.db);
+    const toastsFailedConfirm = [];
+    const fakeApiReqFailingConfirm = async (endpoint, opts) => {
+      if (endpoint.includes('copy-confirm')) {
+        return { ok: false, status: 500, data: { error: 'Database locked' } };
+      }
+      return fakeApiReq(endpoint, opts);
+    };
+    let writeCalledForDraft3 = false;
+    const mockClipboardDraft3 = {
+      writeText: async () => {
+        writeCalledForDraft3 = true;
+      }
+    };
+    const resFailConfirm = await executeDraftCopy({
+      leadId: lead.id,
+      draft: draft3,
+      textToCopy: 'Texto copiado',
+      clipboardApi: mockClipboardDraft3,
+      apiReq: fakeApiReqFailingConfirm,
+      onToast: (msg) => toastsFailedConfirm.push(msg)
+    });
+    assert.equal(resFailConfirm.success, false);
+    assert.equal(resFailConfirm.reason, 'CONFIRM_FAILED');
+    assert.equal(writeCalledForDraft3, true, 'writeText sí debió ejecutarse porque la autorización fue exitosa');
+    assert.ok(toastsFailedConfirm.some(t => t.includes('falló la confirmación en el servidor')), 'Debe alertar que falló la confirmación en el servidor');
+  } finally {
+    cleanupTestEnv(env.dbPath);
+  }
+});
+
+// 21. Responsividad y ausencia de estilos inline que provoquen overflow en móvil
+test('TP-03: 21. Verificación estática de reglas de responsividad móvil en HTML y CSS', () => {
+  const htmlPath = path.join(__dirname, '..', 'public', 'index.html');
+  const cssPath = path.join(__dirname, '..', 'public', 'style.css');
+
+  const htmlContent = fs.readFileSync(htmlPath, 'utf8');
+  const cssContent = fs.readFileSync(cssPath, 'utf8');
+
+  // Asegurar que no existan estilos inline de grid-column que rompan el breakpoint móvil
+  assert.ok(!htmlContent.includes('style="grid-column: span 2"'), 'No debe existir style="grid-column: span 2" inline');
+  assert.ok(!htmlContent.includes('grid-column: span 2;'), 'No debe existir grid-column: span 2 en atributos style');
+
+  // Asegurar que las tarjetas usen la clase card-span-full
+  assert.ok(htmlContent.includes('card-span-full'), 'index.html debe usar la clase card-span-full para expansión controlada');
+
+  // Asegurar que CSS defina card-span-full y media queries responsive
+  assert.ok(cssContent.includes('.card-span-full'), 'style.css debe definir .card-span-full');
+  assert.ok(cssContent.includes('@media (max-width: 900px)'), 'style.css debe definir breakpoint móvil/tablet');
+  assert.ok(cssContent.includes('grid-template-columns: 1fr'), 'style.css debe colapsar a 1fr en vista móvil');
+});
+

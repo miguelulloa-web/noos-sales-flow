@@ -36,6 +36,7 @@ import {
   getLatestDraftByLeadId,
   getDraftsHistoryByLeadId,
   updateResponseDraft,
+  validateDraftForCopy,
   markDraftCopied,
   listLeadsWithTriageSummary,
   getDb
@@ -55,6 +56,9 @@ const __dirname = path.dirname(__filename);
 export function createApp(options = {}) {
   const app = express();
   const fetchFn = options.fetchFn || fetch;
+
+  // Favicon handler to prevent 404 noise
+  app.get('/favicon.ico', (req, res) => res.status(204).end());
 
   // Serve static assets from public/ directory
   app.use(express.static(path.join(__dirname, '..', 'public')));
@@ -666,8 +670,38 @@ export function createApp(options = {}) {
     }
   });
 
-  // Drafts: Register draft copied to clipboard (strictly forbidden if STALE)
-  app.post('/api/leads/:id/drafts/:draftId/copy', requireAuth, (req, res) => {
+  // Drafts: Pre-authorize draft copy (validates lead ownership and STALE state without altering DB or audit)
+  app.post('/api/leads/:id/drafts/:draftId/copy-authorize', requireAuth, (req, res) => {
+    const leadId = req.params.id;
+    const { draftId } = req.params;
+
+    try {
+      const draft = validateDraftForCopy({
+        draftId,
+        leadId
+      });
+
+      return res.json({
+        status: 'ok',
+        authorized: true,
+        draft
+      });
+    } catch (err) {
+      if (err.code === 'DRAFT_NOT_FOUND') {
+        return res.status(404).json({ error: err.message, code: 'DRAFT_NOT_FOUND' });
+      }
+      if (err.code === 'DRAFT_STALE') {
+        return res.status(409).json({
+          error: 'Borrador desactualizado (STALE) no puede ser copiado',
+          code: 'DRAFT_STALE'
+        });
+      }
+      return res.status(500).json({ error: err.message, code: 'AUTHORIZATION_FAILED' });
+    }
+  });
+
+  // Drafts: Confirm draft copied (registers status and appends DRAFT_COPIED to audit log)
+  const handleCopyConfirmation = (req, res) => {
     const leadId = req.params.id;
     const { draftId } = req.params;
 
@@ -694,6 +728,16 @@ export function createApp(options = {}) {
       }
       return res.status(500).json({ error: err.message, code: 'COPY_FAILED' });
     }
+  };
+
+  app.post('/api/leads/:id/drafts/:draftId/copy-confirm', requireAuth, handleCopyConfirmation);
+
+  // Deprecated direct copy route: explicitly rejected with 410 to prevent bypassing copy-authorize and client writeText
+  app.all('/api/leads/:id/drafts/:draftId/copy', (req, res) => {
+    return res.status(410).json({
+      error: 'Endpoint retirado. La copia exige el flujo estricto copy-authorize y confirmación posterior copy-confirm.',
+      code: 'ENDPOINT_DEPRECATED'
+    });
   });
 
   // 404 handler

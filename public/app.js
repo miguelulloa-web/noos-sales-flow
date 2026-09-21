@@ -1,3 +1,5 @@
+import { executeDraftCopy } from './clipboard_workflow.js';
+
 // Noos Sales Flow — Frontend Client Application (TP-03)
 (function () {
   let currentUser = null;
@@ -188,6 +190,7 @@
       card.className = `lead-card ${lead.id === activeLeadId ? 'active' : ''}`;
       card.setAttribute('role', 'option');
       card.setAttribute('aria-selected', lead.id === activeLeadId ? 'true' : 'false');
+      card.setAttribute('data-id', lead.id);
 
       const company = lead.company_name || 'Sin empresa identificada';
       const contact = lead.sender_name || lead.sender_email || 'Sin contacto';
@@ -341,7 +344,7 @@
 
     draftTextarea.disabled = false;
     draftTextarea.value = draft.edited_text || draft.initial_draft_text;
-    draftVersionMeta.textContent = `Basado en hechos v${draft.confirmed_facts_version} &bull; Modelo: ${draft.model_identifier}`;
+    draftVersionMeta.textContent = `Basado en hechos v${draft.confirmed_facts_version} · Modelo: ${draft.model_identifier}`;
 
     if (draft.status === 'STALE') {
       draftStatusBadge.textContent = 'DESACTUALIZADO (STALE)';
@@ -458,44 +461,18 @@
   btnCopyDraft.addEventListener('click', async () => {
     if (!activeLeadId || !activeLeadData?.current_draft) return;
     const draft = activeLeadData.current_draft;
-
-    if (draft.status === 'STALE') {
-      showToast('Bloqueado: no se puede copiar un borrador en estado STALE.');
-      return;
-    }
-
     const textToCopy = draftTextarea.value.trim();
-    if (!textToCopy) return;
 
     btnCopyDraft.disabled = true;
     try {
-      // 1. Authorize copy in backend first (verifies that draft is not STALE)
-      const res = await apiRequest(`/api/leads/${activeLeadId}/drafts/${draft.id}/copy`, {
-        method: 'POST'
+      await executeDraftCopy({
+        leadId: activeLeadId,
+        draft,
+        textToCopy,
+        apiReq: apiRequest,
+        onToast: showToast,
+        onReload: () => selectLead(activeLeadId)
       });
-
-      if (!res.ok) {
-        if (res.status === 409 || res.data?.code === 'DRAFT_STALE') {
-          showToast('Bloqueado: el borrador ha quedado desactualizado (STALE) y no puede ser copiado.');
-        } else {
-          showToast(`Error: ${res.data?.error || 'No se pudo autorizar la copia'}`);
-        }
-        // Reload detail to show current updated state
-        await selectLead(activeLeadId);
-        return;
-      }
-
-      // 2. Only write to clipboard after backend authorization succeeds
-      try {
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          await navigator.clipboard.writeText(textToCopy);
-        }
-      } catch (clipErr) {
-        console.warn('Clipboard write fallback:', clipErr);
-      }
-
-      showToast('✓ Borrador verificado y copiado al portapapeles');
-      await selectLead(activeLeadId);
     } finally {
       btnCopyDraft.disabled = false;
     }

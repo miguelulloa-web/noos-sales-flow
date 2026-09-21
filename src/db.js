@@ -908,7 +908,7 @@ export function updateResponseDraft({ draftId, leadId = null, editedText, review
   return updated;
 }
 
-export function markDraftCopied({ draftId, leadId = null, reviewedByUserId }, db = getDb()) {
+export function validateDraftForCopy({ draftId, leadId = null }, db = getDb()) {
   const current = getDraftById(draftId, db);
   if (!current) {
     const err = new Error('Borrador no encontrado');
@@ -925,6 +925,11 @@ export function markDraftCopied({ draftId, leadId = null, reviewedByUserId }, db
     err.code = 'DRAFT_STALE';
     throw err;
   }
+  return current;
+}
+
+export function markDraftCopied({ draftId, leadId = null, reviewedByUserId }, db = getDb()) {
+  const current = validateDraftForCopy({ draftId, leadId }, db);
 
   const now = new Date().toISOString();
   db.prepare(`

@@ -44,9 +44,9 @@ changes:
 environments:
   - logical_name: DEV
     physical_target: "http://localhost:3000"
-    version: "v0.3.0-dev (TP-03 complete, 37/37 tests PASS, empirical and real browser validation PASS)"
+    version: "v0.3.0-dev (TP-03 COMPLETO)"
     protection: UNPROTECTED
-    validation: "Pass (npm test: 37/37 tests PASS, verify_real_tp03.js PASS, Chromium browser validation PASS)"
+    validation: "PASS (40/40 pruebas, verificación empírica Gemini PASS y validación interactiva auténtica en navegador Chromium PASS)"
   - logical_name: STAGE_GCP
     physical_target: "Google Cloud Run"
     version: null
@@ -58,14 +58,14 @@ quality:
   regression: PASS
   release_gate: NOT_EVALUATED
 authorization:
-  implementation_scope: "TP-03 — Triage UI Master-Detail, Hechos Confirmados y Borradores con Estado STALE (COMPLETADO)"
+  implementation_scope: "TP-03 — Triage UI Master-Detail, Hechos Confirmados y Borradores con Estado STALE (COMPLETO)"
   authorized_by: "Sponsor (Miguel Ulloa)"
   authorized_at: "2026-09-17T13:43:54-03:00"
   expires_on_scope_change: true
 next_action:
-  sponsor: "Revisar evidencia EV-TP-03 y autorizar inicio de TP-04 (Gestión Comercial, Bandeja de Vencimientos, Exportación CSV/JSON y Resiliencia)"
-  internal: AWAITING_TP04_AUTHORIZATION
+  sponsor: "Revisar evidencia de cierre de TP-03 (EV-TP-03) con capturas de navegador real y autorizar inicio de TP-04 mediante /aagm-continue"
+  internal: AWAITING_SPONSOR_TP04_AUTHORIZATION
 dashboard:
   sync_status: SYNCED
-  last_synced_at: "2026-09-18T22:25:00-03:00"
+  last_synced_at: "2026-09-21T20:10:00-03:00"
 

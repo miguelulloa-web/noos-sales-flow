@@ -1,0 +1,13 @@
+{
+  "validation_mode": "AUTHENTIC_BROWSER_HTTP_PROBE",
+  "timestamp": "2026-09-21T23:46:25.543Z",
+  "lead_id": "21d79052-352b-46ed-b47e-094b9288eda4",
+  "draft_id": "54f29e5b-248b-4709-902a-32d01174171e",
+  "endpoint_probed": "/api/leads/21d79052-352b-46ed-b47e-094b9288eda4/drafts/54f29e5b-248b-4709-902a-32d01174171e/copy-authorize",
+  "http_status": 409,
+  "response_body": {
+    "error": "Borrador desactualizado (STALE) no puede ser copiado",
+    "code": "DRAFT_STALE"
+  },
+  "conclusion": "PASS: Copy authorization strictly blocked on STALE draft with HTTP 409 Conflict"
+}

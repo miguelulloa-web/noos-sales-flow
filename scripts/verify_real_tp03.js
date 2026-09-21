@@ -213,10 +213,22 @@ Saludos cordiales.`;
       throw new Error(`Contenido de borrador 1 demasiado corto o vacío: ${draft1Text}`);
     }
 
-    // 4. Copy Draft v1 (should succeed)
+    // 4. Pre-authorize and Confirm Copy of Draft v1
+    const authV1Res = await invokeApp(app, {
+      method: 'POST',
+      url: `/api/leads/${leadId}/drafts/${draftV1.id}/copy-authorize`,
+      headers: {
+        cookie: sessionCookie,
+        origin: 'http://127.0.0.1:3000'
+      }
+    });
+    if (authV1Res.status !== 200 || !authV1Res.body.authorized) {
+      throw new Error(`Fallo al autorizar copia de borrador 1: ${JSON.stringify(authV1Res.body)}`);
+    }
+
     const copyV1Res = await invokeApp(app, {
       method: 'POST',
-      url: `/api/leads/${leadId}/drafts/${draftV1.id}/copy`,
+      url: `/api/leads/${leadId}/drafts/${draftV1.id}/copy-confirm`,
       headers: {
         cookie: sessionCookie,
         origin: 'http://127.0.0.1:3000'
@@ -255,10 +267,22 @@ Saludos cordiales.`;
       throw new Error(`Borrador 1 no pasó a STALE tras hechos v2: ${JSON.stringify(dbDraftV1After)}`);
     }
 
-    // 7. Attempt to copy STALE Draft v1 (MUST FAIL with 409)
+    // 7. Attempt to copy STALE Draft v1 (MUST FAIL with 409 on authorize and confirm)
+    const staleAuthRes = await invokeApp(app, {
+      method: 'POST',
+      url: `/api/leads/${leadId}/drafts/${draftV1.id}/copy-authorize`,
+      headers: {
+        cookie: sessionCookie,
+        origin: 'http://127.0.0.1:3000'
+      }
+    });
+    if (staleAuthRes.status !== 409 || staleAuthRes.body.code !== 'DRAFT_STALE') {
+      throw new Error(`Intento de autorizar borrador STALE no retornó HTTP 409 DRAFT_STALE: status ${staleAuthRes.status}, body: ${JSON.stringify(staleAuthRes.body)}`);
+    }
+
     const staleCopyRes = await invokeApp(app, {
       method: 'POST',
-      url: `/api/leads/${leadId}/drafts/${draftV1.id}/copy`,
+      url: `/api/leads/${leadId}/drafts/${draftV1.id}/copy-confirm`,
       headers: {
         cookie: sessionCookie,
         origin: 'http://127.0.0.1:3000'
@@ -291,10 +315,22 @@ Saludos cordiales.`;
       throw new Error(`Borrador 2 tiene estado inesperado: ${JSON.stringify(draftV2)}`);
     }
 
-    // 9. Copy Draft v2 (should succeed)
+    // 9. Pre-authorize and Confirm Copy of Draft v2
+    const authV2Res = await invokeApp(app, {
+      method: 'POST',
+      url: `/api/leads/${leadId}/drafts/${draftV2.id}/copy-authorize`,
+      headers: {
+        cookie: sessionCookie,
+        origin: 'http://127.0.0.1:3000'
+      }
+    });
+    if (authV2Res.status !== 200 || !authV2Res.body.authorized) {
+      throw new Error(`Fallo al autorizar copia de borrador 2: ${JSON.stringify(authV2Res.body)}`);
+    }
+
     const copyV2Res = await invokeApp(app, {
       method: 'POST',
-      url: `/api/leads/${leadId}/drafts/${draftV2.id}/copy`,
+      url: `/api/leads/${leadId}/drafts/${draftV2.id}/copy-confirm`,
       headers: {
         cookie: sessionCookie,
         origin: 'http://127.0.0.1:3000'
