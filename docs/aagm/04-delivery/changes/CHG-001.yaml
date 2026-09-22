@@ -13,12 +13,12 @@ impact_analysis_ref: "docs/aagm/04-delivery/impact-analysis/IA-CHG-001.md"
 approvals:
   requirement: "Aprobado por Sponsor (2026-09-14)"
   solution_design: "Aprobado por Sponsor (2026-09-14)"
-  implementation_scope: "Autorizado por Sponsor para TP-01 (2026-09-15), TP-02 (2026-09-16) y TP-03 (2026-09-17)"
+  implementation_scope: "Autorizado por Sponsor para TP-01 (2026-09-15), TP-02 (2026-09-16), TP-03 (2026-09-17) y TP-04 (2026-09-21)"
 task_packets:
   - TP-01 (DONE)
   - TP-02 (DONE)
   - TP-03 (DONE)
-  - TP-04 (READY)
+  - TP-04 (IMPLEMENTING)
   - TP-05 (DRAFT)
 commits_or_prs:
   - "8f214f5 (feat: implement TP-01 local foundation, persistence, auth and audit log)"
@@ -31,6 +31,9 @@ commits_or_prs:
   - "499dd38 (fix(drafts): increase default timeout to 45s for Gemini generative draft)"
   - "218111d (fix(empirical): tune draft timeout to 60s and spacing before draft v2)"
   - "80ee9a4 (fix(drafts): increase retry count and delay on transient 503 for empirical test)"
+  - "33da4af (docs(delivery): register EV-TP-03 and close TP-03 as DONE with empirical and browser validation PASS)"
+  - "057963e (fix(triage): purge credentials, enforce authentic browser validation, and fix mobile responsiveness)"
+  - "4c4e8b9 (fix(triage): harden browser validation, enforce strict clipboard match, and clarify secret traceability)"
 evidence:
   - "docs/aagm/02-solution-design/EV-003-solution-design.md"
   - "docs/aagm/03-planning/EV-004-planning.md"

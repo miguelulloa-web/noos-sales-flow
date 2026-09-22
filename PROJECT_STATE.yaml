@@ -58,14 +58,14 @@ quality:
   regression: PASS
   release_gate: NOT_EVALUATED
 authorization:
-  implementation_scope: "TP-03 — Triage UI Master-Detail, Hechos Confirmados y Borradores con Estado STALE (COMPLETO)"
+  implementation_scope: "TP-03 — Triage UI Master-Detail, Hechos Confirmados y Borradores con Estado STALE (ACEPTADO Y CERRADO)"
   authorized_by: "Sponsor (Miguel Ulloa)"
-  authorized_at: "2026-09-17T13:43:54-03:00"
+  authorized_at: "2026-09-17T13:43:54-03:00 (aceptado formalmente 2026-09-21)"
   expires_on_scope_change: true
 next_action:
-  sponsor: "Revisar evidencia de cierre de TP-03 (EV-TP-03) con capturas de navegador real y autorizar inicio de TP-04 mediante /aagm-continue"
-  internal: AWAITING_SPONSOR_TP04_AUTHORIZATION
+  sponsor: "Autorización formal de TP-04 otorgada el 2026-09-21. Ejecutar e implementar TP-04."
+  internal: IMPLEMENT_TP04
 dashboard:
   sync_status: SYNCED
-  last_synced_at: "2026-09-21T20:10:00-03:00"
+  last_synced_at: "2026-09-21T22:25:00-03:00"
 
