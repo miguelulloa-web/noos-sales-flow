@@ -29,23 +29,29 @@ Para asegurar la autenticidad y reproducibilidad de la evidencia conforme a AAGM
 
 3. **Validación Real en Navegador Chromium**:
    - `scripts/capture_real_browser_evidence.js` levanta el servidor en un puerto libre, abre Chromium real (Google Chrome) e interactúa exclusivamente a través de los elementos del DOM.
+   - Tras seleccionar el lead, se espera con aserciones explícitas a que `#leadHeaderCompany` ('Logística Austral S.A.'), `#leadRawText` (texto real, no 'Cargando'), `#factsVersionBadge` ('v1') y `#draftStatusBadge` ('SIN BORRADOR') estén completamente poblados antes de capturar `01_master_detail_lead_selected.png`, garantizando la ausencia total de marcadores de posición temporales.
    - La primera generación se ejecuta haciendo clic en el botón `#btnGenerateDraft` («Generar Borrador con IA») y esperando la respuesta real de Gemini.
-   - La copia se ejecuta con `#btnCopyDraft` («Copiar al Portapapeles») y se verifica el contenido del portapapeles del sistema (`context.grantPermissions(['clipboard-read', 'clipboard-write'])`).
+   - La copia se ejecuta con `#btnCopyDraft` («Copiar al Portapapeles») y se verifica estrictamente el contenido del portapapeles del sistema mediante `navigator.clipboard.readText()`. Si la lectura falla o difiere del borrador, se lanza un error que aborta la validación (cero advertencias o continuaciones suaves).
    - La modificación de hechos a `v2` se efectúa enviando el formulario `#confirmedFactsForm`.
    - Se comprueba en pantalla y en DOM que el borrador pasa a `DESACTUALIZADO (STALE)` y que el botón de copia se deshabilita.
    - Se sondea el endpoint `copy-authorize` sobre el borrador desactualizado, comprobando que responde exactamente `409 Conflict` (`DRAFT_STALE`). El resultado se persiste como artefacto durable en `docs/aagm/04-delivery/evidence/tp03_copy_stale_response.json`.
    - La regeneración se ejecuta mediante el botón real `#btnGenerateDraft` («Regenerar Borrador con hechos v2») y se comprueba el nuevo borrador generado por Gemini enlazado a la versión 2.
    - En viewport móvil (390 × 844 px), se mide que `scrollWidth <= clientWidth`, comprobando la ausencia total de desbordamiento horizontal.
-   - Se audita que no existan errores de consola (`consoleErrors.length === 0`) ni respuestas de error 5xx (`server5xxErrors.length === 0`).
+   - Se audita que no existan errores de consola no previstos (`consoleErrors.length === 0`, limitando excepciones estrictamente a URLs esperadas: 401 en `/api/auth/me` y 409 en `copy-authorize`) ni respuestas de error 5xx del servidor (`server5xxErrors.length === 0`).
 
 ---
 
 ## 2. Alcance Implementado y Correcciones Técnicas
 
-1. **Purga Total de Credenciales**:
-   - Se eliminó toda contraseña hardcodeada de los scripts de validación.
-   - Se utilizó `crypto.randomBytes(16)` para generar contraseñas efímeras por corrida en bases temporales descartables.
-   - Se eliminó el commit anterior `c401849` de la historia Git mediante `git reset HEAD~1`, garantizando que ningún secreto permanezca en la historia alcanzable de Git.
+1. **Purga y Trazabilidad Rigurosa de Credenciales**:
+   - Se eliminó toda contraseña hardcodeada de los scripts de validación, reemplazándolas por generación dinámica mediante `crypto.randomBytes(16)` en bases temporales descartables.
+   - El commit `c401849` (que contenía la credencial standalone en texto claro) fue completamente desvinculado mediante `git reset HEAD~1`:
+     - `git merge-base --is-ancestor c401849 HEAD` devuelve código 1 (no es ancestro de `HEAD`).
+     - `git branch --contains c401849` y `git tag --contains c401849` retornan vacío (no está contenido en ninguna rama o tag alcanzable).
+   - Se distingue con precisión la búsqueda exacta del literal standalone comprometido frente a contraseñas sintéticas de prueba:
+     - La búsqueda exacta por límite de palabra `git log -G '(^|[^a-zA-Z0-9])Password123!' --oneline` retorna **0 coincidencias** en toda la historia alcanzable.
+     - El comando por subcadena `git log -S "Password123!"` detecta únicamente el commit `8f214f5` (fundación de TP-01), correspondiente exclusivamente a fixtures sintéticos de pruebas unitarias con valores diferentes (`SuperSecretPassword123!`, `AdminPassword123!`, `OperatorPassword123!` en `tests/auth_and_db.test.js`).
+     - `git grep -n "Password123!" HEAD` confirma que en el árbol de trabajo actual solo existen dichos fixtures sintéticos de prueba de TP-01 y ninguna credencial independiente.
 
 2. **Módulo Único de Portapapeles Compartido (`public/clipboard_workflow.js`)**:
    - Se unificó la lógica del flujo de copia en un único archivo canónico: `public/clipboard_workflow.js`.
@@ -194,7 +200,7 @@ Inventario de capturas generadas y artefactos asociados:
 
 1. **`01_master_detail_lead_selected.png`**
    - *Ruta*: `docs/aagm/04-delivery/evidence/screenshots/01_master_detail_lead_selected.png`
-   - *Descripción*: Vista Master-Detail tras login interactivo exitoso. Lead *Logística Austral S.A.* seleccionado; panel de hechos muestra versión v1 y borrador en estado `SIN BORRADOR`.
+   - *Descripción*: Vista Master-Detail tras login interactivo exitoso. Se aguarda la resolución completa de la API antes de capturar: `#leadHeaderCompany` muestra *Logística Austral S.A.*, `#leadRawText` despliega el texto real completo (sin estado «Cargando»), panel de hechos muestra versión `v1` y borrador en estado `SIN BORRADOR`. Todos los marcadores de posición temporales han desaparecido.
 
 2. **`02_draft_generated_vigente.png`**
    - *Ruta*: `docs/aagm/04-delivery/evidence/screenshots/02_draft_generated_vigente.png`
@@ -202,7 +208,7 @@ Inventario de capturas generadas y artefactos asociados:
 
 3. **`03_draft_copied_success.png`**
    - *Ruta*: `docs/aagm/04-delivery/evidence/screenshots/03_draft_copied_success.png`
-   - *Descripción*: Estado tras accionar «Copiar al Portapapeles». El portapapeles del navegador contiene exactamente el texto del borrador, se emite toast confirmatorio y el badge cambia a `COPIADO`.
+   - *Descripción*: Estado tras accionar «Copiar al Portapapeles». Verificación estricta mediante `navigator.clipboard.readText()` comprobando coincidencia exacta caracter a caracter con el borrador generado, toast confirmatorio y badge actualizado a `COPIADO`.
 
 4. **`04_draft_stale_disabled_copy.png`**
    - *Ruta*: `docs/aagm/04-delivery/evidence/screenshots/04_draft_stale_disabled_copy.png`
@@ -236,13 +242,13 @@ Inventario de capturas generadas y artefactos asociados:
 | **Módulo único compartido** | Un solo archivo para browser y tests | CUMPLE | `public/clipboard_workflow.js` importado en `public/app.js` y `tp03_triage_and_drafts.test.js`. |
 | **Integridad de rutas** | Verificación de pertenencia de draft a lead | CUMPLE | PATCH y COPY retornan 404 si el draft no pertenece al lead indicado; Test 15. |
 | **Configuración IA** | `RESPONSE_DRAFT_CONFIG` independiente | CUMPLE | `resolveDraftModel` desacoplado de extracción; modelo `gemini-3.6-flash`; Test 17. |
-| **UI Master-Detail** | 3 secciones (Inmutable, Hechos, Borradores) | CUMPLE | Verificado en Chromium real; 7 capturas de pantalla registradas. |
+| **UI Master-Detail** | 3 secciones (Inmutable, Hechos, Borradores) | CUMPLE | Verificado en Chromium real; 7 capturas de pantalla registradas (01 con datos reales cargados). |
 | **Responsividad móvil** | Viewport 390 × 844 px sin overflow | CUMPLE | `scrollWidth === clientWidth === 390px`; Test 21 y captura 07. |
 | **Auditoría append-only** | Registro en `audit_log` con autor y metadata | CUMPLE | Eventos `FACTS_CONFIRMED`, `DRAFT_GENERATED`, `DRAFT_COPIED`, `DRAFT_MARKED_STALE` en `audit_log`. |
-| **Purga de credenciales** | Sin secretos en archivos ni en commit history | CUMPLE | Búsqueda exhaustiva en HEAD e historia devuelve 0 coincidencias. |
+| **Purga de credenciales** | Sin secretos en archivos ni en commit history | CUMPLE | Credencial standalone purgada de HEAD e historia alcanzable (c401849 huérfano; 0 hits con regex de palabra exacta; hits por subcadena son fixtures sintéticos de TP-01). |
 | **Regresión completa** | TP-01, TP-02 y TP-03 protegidos | CUMPLE | 40/40 pruebas totales aprobadas (19 previas + 21 de TP-03). |
 | **Validación empírica real** | Script con Gemini 3.6 Flash | CUMPLE | `scripts/verify_real_tp03.js` completado con `PASS`. |
-| **Validación de navegador** | Chromium E2E interactivo auténtico | CUMPLE | 7 capturas registradas; botones UI reales accionados; portapapeles y 409 verificados. |
+| **Validación de navegador** | Chromium E2E interactivo auténtico | CUMPLE | 7 capturas registradas; botones UI reales accionados; portapapeles estricto y 409 verificados. |
 
 ---
 
@@ -250,5 +256,5 @@ Inventario de capturas generadas y artefactos asociados:
 
 El Task Packet `TP-03` ha superado satisfactoriamente todas las pruebas de regresión técnica, seguridad, arquitectura, concurrencia, responsividad móvil y validación interactiva auténtica en navegador real con Google Gemini API.
 
-Estado del Task Packet: **`DONE`**.
-Recomendación para el Sponsor: Cerrar formalmente `TP-03` y evaluar la autorización de la siguiente unidad (`TP-04`).
+Estado del Task Packet: **`PENDING_VALIDATION`** (preparado para la revisión final del Sponsor; TP-04 no iniciado).
+Recomendación para el Sponsor: Revisar la evidencia consolidada para formalizar el cierre de `TP-03` y evaluar oportunamente la autorización de `TP-04`.

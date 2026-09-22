@@ -153,18 +153,30 @@ async function run() {
 
     const consoleErrors = [];
     const server5xxErrors = [];
+    let isExpecting409Probe = false;
 
     page.on('console', msg => {
-      const text = msg.text();
-      // Filter out expected intentional network error logs in console
-      const isExpectedProbe = text.includes('401') || text.includes('409') || text.includes('status of 409') || text.includes('status of 401') || text.includes('ENDPOINT_DEPRECATED');
-      if (msg.type() === 'error' && !isExpectedProbe) {
-        consoleErrors.push(text);
+      if (msg.type() === 'error') {
+        const text = msg.text();
+        const locationUrl = msg.location()?.url || '';
+
+        // Concrete expected request 1: Initial unauthenticated check GET /api/auth/me returning 401
+        const isExpectedAuthCheck401 = text.includes('401') &&
+          (text.includes('/api/auth/me') || locationUrl.includes('/api/auth/me'));
+
+        // Concrete expected request 2: Intentional probe POST /api/leads/:id/drafts/:draftId/copy-authorize returning 409
+        const isExpectedCopyProbe409 = isExpecting409Probe &&
+          (text.includes('409') || text.includes('Conflict')) &&
+          (text.includes('copy-authorize') || locationUrl.includes('copy-authorize'));
+
+        if (!isExpectedAuthCheck401 && !isExpectedCopyProbe409) {
+          consoleErrors.push({ text, location: msg.location() });
+        }
       }
     });
 
     page.on('pageerror', err => {
-      consoleErrors.push(`PageError: ${err.message}`);
+      consoleErrors.push({ text: `PageError: ${err.message}` });
     });
 
     page.on('response', res => {
@@ -195,42 +207,84 @@ async function run() {
     await page.waitForSelector('.lead-card');
     const leadCard = page.locator(`.lead-card[data-id="${lead.id}"]`).first();
     await leadCard.click();
-    await page.waitForSelector('#activeDetailContent', { state: 'visible' });
+
+    // Explicitly wait for detail API request to complete and DOM to be populated with real data
+    await page.waitForFunction(() => {
+      const company = document.getElementById('leadHeaderCompany')?.textContent?.trim();
+      const rawText = document.getElementById('leadRawText')?.textContent?.trim();
+      const factsBadge = document.getElementById('factsVersionBadge')?.textContent?.trim();
+      const draftBadge = document.getElementById('draftStatusBadge')?.textContent?.trim();
+
+      const hasCompany = company && company.includes('Logística Austral S.A.');
+      const hasRealText = rawText && !rawText.includes('Cargando') && rawText.length > 20;
+      const hasFactsV1 = factsBadge && factsBadge.includes('v1');
+      const hasSinBorrador = draftBadge && draftBadge.includes('SIN BORRADOR');
+
+      return hasCompany && hasRealText && hasFactsV1 && hasSinBorrador;
+    }, { timeout: 10000 });
+
+    // Assertions to ensure no placeholders remain
+    const headerCompanyText = await page.textContent('#leadHeaderCompany');
+    if (!headerCompanyText.includes('Logística Austral S.A.')) {
+      throw new Error(`Assertion failed: expected Logística Austral S.A., got "${headerCompanyText}"`);
+    }
+
+    const rawTextContent = await page.textContent('#leadRawText');
+    if (rawTextContent.includes('Cargando') || rawTextContent.length < 20) {
+      throw new Error(`Assertion failed: rawText not fully loaded: "${rawTextContent}"`);
+    }
+
+    const factsBadgeText = await page.textContent('#factsVersionBadge');
+    if (!factsBadgeText.includes('v1')) {
+      throw new Error(`Assertion failed: expected facts v1 badge, got "${factsBadgeText}"`);
+    }
 
     const initialDraftBadge = await page.textContent('#draftStatusBadge');
     if (!initialDraftBadge.includes('SIN BORRADOR')) {
       throw new Error(`Assertion failed: expected SIN BORRADOR, got "${initialDraftBadge}"`);
     }
 
-    console.log('[BROWSER VALIDATION] Capturing 01_master_detail_lead_selected.png...');
+    console.log('[BROWSER VALIDATION] Detail fully loaded. Capturing 01_master_detail_lead_selected.png...');
     await page.screenshot({
       path: path.join(SCREENSHOTS_DIR, '01_master_detail_lead_selected.png'),
       fullPage: false
     });
 
     // Step 3: Real Generation via UI Button Click
-    console.log('[BROWSER VALIDATION] Spacing 15s to allow Gemini API rate limit sliding window to be clear...');
-    await new Promise(r => setTimeout(r, 15000));
+    console.log('[BROWSER VALIDATION] Spacing 30s to allow Gemini API rate limit sliding window to be clear...');
+    await new Promise(r => setTimeout(r, 30000));
     console.log('[BROWSER VALIDATION] Step 3: Triggering real draft generation via UI button «Generar Borrador con IA»...');
     const generateBtn = page.locator('#btnGenerateDraft');
-    await generateBtn.click();
+    let toastText1 = '';
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await page.evaluate(() => {
+        const toast = document.getElementById('appToast');
+        if (toast) { toast.style.display = 'none'; toast.textContent = ''; }
+      });
+      await generateBtn.click();
+      await page.waitForFunction(() => {
+        const toast = document.getElementById('appToast');
+        if (toast && toast.style.display !== 'none' && toast.textContent.toLowerCase().includes('error')) {
+          return true;
+        }
+        const badge = document.getElementById('draftStatusBadge');
+        const textarea = document.getElementById('draftTextarea');
+        return badge && badge.textContent.includes('GENERADO VIGENTE') && textarea && textarea.value.trim().length > 30;
+      }, { timeout: 90000 });
 
-    // Wait for real Gemini API generation to complete (up to 90s)
-    console.log('[BROWSER VALIDATION] Awaiting real Gemini generation response...');
-    await page.waitForFunction(() => {
-      const toast = document.getElementById('appToast');
-      if (toast && toast.style.display !== 'none' && toast.textContent.toLowerCase().includes('error')) {
-        return true;
+      toastText1 = await page.evaluate(() => {
+        const toast = document.getElementById('appToast');
+        return (toast && toast.style.display !== 'none') ? toast.textContent : '';
+      });
+
+      if (toastText1.includes('429') && attempt < 2) {
+        console.log(`[BROWSER VALIDATION] Transient quota 429 hit. Waiting 45s before retry ${attempt + 1}...`);
+        await new Promise(r => setTimeout(r, 45000));
+        continue;
       }
-      const badge = document.getElementById('draftStatusBadge');
-      const textarea = document.getElementById('draftTextarea');
-      return badge && badge.textContent.includes('GENERADO VIGENTE') && textarea && textarea.value.trim().length > 30;
-    }, { timeout: 90000 });
+      break;
+    }
 
-    const toastText1 = await page.evaluate(() => {
-      const toast = document.getElementById('appToast');
-      return (toast && toast.style.display !== 'none') ? toast.textContent : '';
-    });
     if (toastText1.toLowerCase().includes('error')) {
       throw new Error(`Generation failed with UI toast error: ${toastText1}`);
     }
@@ -273,17 +327,18 @@ async function run() {
 
     await page.waitForSelector('#draftStatusBadge.badge-copied', { timeout: 5000 });
 
-    // Verify clipboard content in browser context
+    // Verify clipboard content in browser context (strict assertion)
+    let clipboardContent;
     try {
-      const clipboardContent = await page.evaluate(() => navigator.clipboard.readText());
-      if (clipboardContent !== draftText1) {
-        console.warn(`[BROWSER VALIDATION] Clipboard content mismatch: length ${clipboardContent?.length} vs ${draftText1.length}`);
-      } else {
-        console.log('[BROWSER VALIDATION] Clipboard content matches draft text exactly.');
-      }
+      clipboardContent = await page.evaluate(() => navigator.clipboard.readText());
     } catch (clipErr) {
-      console.log('[BROWSER VALIDATION] Clipboard readText permission restriction:', clipErr.message);
+      throw new Error(`Assertion failed: Failed to read from clipboard via navigator.clipboard.readText(): ${clipErr.message}`);
     }
+
+    if (clipboardContent !== draftText1) {
+      throw new Error(`Assertion failed: Clipboard content mismatch! Expected length ${draftText1.length}, got ${clipboardContent?.length}`);
+    }
+    console.log('[BROWSER VALIDATION] Clipboard content matches draft text exactly.');
 
     console.log('[BROWSER VALIDATION] Capturing 03_draft_copied_success.png...');
     await page.screenshot({
@@ -340,23 +395,30 @@ async function run() {
 
     // Step 7: Demonstrate HTTP 409 Rejection on STALE Draft
     console.log('[BROWSER VALIDATION] Step 7: Demonstrating HTTP 409 rejection on STALE draft...');
-    const copy409Result = await page.evaluate(async (targetLeadId) => {
-      const res = await fetch(`/api/leads/${targetLeadId}`, { headers: { 'Accept': 'application/json' } });
-      const detail = await res.json();
-      const draftId = detail.current_draft?.id;
+    isExpecting409Probe = true;
+    let copy409Result;
+    try {
+      copy409Result = await page.evaluate(async (targetLeadId) => {
+        const res = await fetch(`/api/leads/${targetLeadId}`, { headers: { 'Accept': 'application/json' } });
+        const detail = await res.json();
+        const draftId = detail.current_draft?.id;
 
-      const copyAuthRes = await fetch(`/api/leads/${targetLeadId}/drafts/${draftId}/copy-authorize`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      const copyAuthBody = await copyAuthRes.json();
+        const copyAuthRes = await fetch(`/api/leads/${targetLeadId}/drafts/${draftId}/copy-authorize`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const copyAuthBody = await copyAuthRes.json();
 
-      return {
-        status: copyAuthRes.status,
-        body: copyAuthBody,
-        draftId
-      };
-    }, lead.id);
+        return {
+          status: copyAuthRes.status,
+          body: copyAuthBody,
+          draftId
+        };
+      }, lead.id);
+    } finally {
+      await page.waitForTimeout(200);
+      isExpecting409Probe = false;
+    }
 
     if (copy409Result.status !== 409 || copy409Result.body.code !== 'DRAFT_STALE') {
       throw new Error(`Assertion failed: Expected 409 DRAFT_STALE, got ${copy409Result.status}: ${JSON.stringify(copy409Result.body)}`);
@@ -396,31 +458,42 @@ async function run() {
     await page.evaluate(() => document.getElementById('harnessEvidenceBanner')?.remove());
 
     // Spacing to clear Gemini rate limit sliding window
-    console.log('[BROWSER VALIDATION] Spacing 20s to allow Gemini API rate limit sliding window to clear...');
-    await new Promise(r => setTimeout(r, 20000));
+    console.log('[BROWSER VALIDATION] Spacing 30s to allow Gemini API rate limit sliding window to clear...');
+    await new Promise(r => setTimeout(r, 30000));
 
-    // Step 8: Real Regeneration via UI Button Click
-    console.log('[BROWSER VALIDATION] Step 8: Triggering real draft regeneration via UI button...');
-    await generateBtn.click();
+    let toastText2 = '';
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await page.evaluate(() => {
+        const toast = document.getElementById('appToast');
+        if (toast) { toast.style.display = 'none'; toast.textContent = ''; }
+      });
+      await generateBtn.click();
+      await page.waitForFunction((prevText) => {
+        const toast = document.getElementById('appToast');
+        if (toast && toast.style.display !== 'none' && toast.textContent.toLowerCase().includes('error')) {
+          return true;
+        }
+        const badge = document.getElementById('draftStatusBadge');
+        const textarea = document.getElementById('draftTextarea');
+        const banner = document.getElementById('staleWarningBanner');
+        return badge && badge.textContent.includes('GENERADO VIGENTE') &&
+               banner && banner.style.display === 'none' &&
+               textarea && textarea.value.trim().length > 30 && textarea.value.trim() !== prevText;
+      }, draftText1, { timeout: 90000 });
 
-    console.log('[BROWSER VALIDATION] Awaiting real Gemini regeneration response for facts v2...');
-    await page.waitForFunction((prevText) => {
-      const toast = document.getElementById('appToast');
-      if (toast && toast.style.display !== 'none' && toast.textContent.toLowerCase().includes('error')) {
-        return true;
+      toastText2 = await page.evaluate(() => {
+        const toast = document.getElementById('appToast');
+        return (toast && toast.style.display !== 'none') ? toast.textContent : '';
+      });
+
+      if (toastText2.includes('429') && attempt < 2) {
+        console.log(`[BROWSER VALIDATION] Transient quota 429 hit on regeneration. Waiting 45s before retry ${attempt + 1}...`);
+        await new Promise(r => setTimeout(r, 45000));
+        continue;
       }
-      const badge = document.getElementById('draftStatusBadge');
-      const textarea = document.getElementById('draftTextarea');
-      const banner = document.getElementById('staleWarningBanner');
-      return badge && badge.textContent.includes('GENERADO VIGENTE') &&
-             banner && banner.style.display === 'none' &&
-             textarea && textarea.value.trim().length > 30 && textarea.value.trim() !== prevText;
-    }, draftText1, { timeout: 90000 });
+      break;
+    }
 
-    const toastText2 = await page.evaluate(() => {
-      const toast = document.getElementById('appToast');
-      return (toast && toast.style.display !== 'none') ? toast.textContent : '';
-    });
     if (toastText2.toLowerCase().includes('error')) {
       throw new Error(`Regeneration failed with UI toast error: ${toastText2}`);
     }
@@ -472,13 +545,13 @@ async function run() {
       fullPage: false
     });
 
-    // Step 10: Assert zero console errors and zero 5xx server responses
+    // Step 10: Assert zero console errors and zero unexpected server errors
     console.log('[BROWSER VALIDATION] Step 10: Verifying console errors and server responses...');
     if (consoleErrors.length > 0) {
-      throw new Error(`Unexpected JavaScript/Console errors detected: ${JSON.stringify(consoleErrors)}`);
+      throw new Error(`Unexpected JavaScript/Console errors detected: ${JSON.stringify(consoleErrors, null, 2)}`);
     }
     if (server5xxErrors.length > 0) {
-      throw new Error(`Unexpected 5xx HTTP server errors detected: ${JSON.stringify(server5xxErrors)}`);
+      throw new Error(`Unexpected 5xx HTTP server errors detected: ${JSON.stringify(server5xxErrors, null, 2)}`);
     }
 
     console.log('[BROWSER VALIDATION] ALL ASSERTIONS PASSED! Real Gemini generation, STALE transition, 409 probe, regeneration, and mobile responsive layout verified.');

@@ -1103,4 +1103,3 @@ test('TP-03: 21. Verificación estática de reglas de responsividad móvil en HT
   assert.ok(cssContent.includes('@media (max-width: 900px)'), 'style.css debe definir breakpoint móvil/tablet');
   assert.ok(cssContent.includes('grid-template-columns: 1fr'), 'style.css debe colapsar a 1fr en vista móvil');
 });
-

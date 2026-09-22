@@ -1,9 +1,9 @@
 {
   "validation_mode": "AUTHENTIC_BROWSER_HTTP_PROBE",
-  "timestamp": "2026-09-21T23:46:25.543Z",
-  "lead_id": "21d79052-352b-46ed-b47e-094b9288eda4",
-  "draft_id": "54f29e5b-248b-4709-902a-32d01174171e",
-  "endpoint_probed": "/api/leads/21d79052-352b-46ed-b47e-094b9288eda4/drafts/54f29e5b-248b-4709-902a-32d01174171e/copy-authorize",
+  "timestamp": "2026-09-22T00:38:39.596Z",
+  "lead_id": "1d1f94e3-5623-4631-b0a0-640546d7b204",
+  "draft_id": "0cdd3122-b536-4af7-b094-c99393fbdcd7",
+  "endpoint_probed": "/api/leads/1d1f94e3-5623-4631-b0a0-640546d7b204/drafts/0cdd3122-b536-4af7-b094-c99393fbdcd7/copy-authorize",
   "http_status": 409,
   "response_body": {
     "error": "Borrador desactualizado (STALE) no puede ser copiado",
