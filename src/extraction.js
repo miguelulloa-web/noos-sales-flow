@@ -210,7 +210,7 @@ export async function callGeminiApi({
   rawText,
   modelIdentifier = null,
   apiKey = null,
-  timeoutMs = 25000,
+  timeoutMs = Number(process.env.GEMINI_TIMEOUT_MS) || 60000,
   fetchFn = fetch,
   db = null
 }) {

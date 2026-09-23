@@ -48,6 +48,8 @@ import {
   getActionsByLeadId,
   getLatestActionByLeadId,
   getExportLeadsBatch,
+  getOperationalSummary,
+  resetSyntheticDemoData,
   getDb
 } from './db.js';
 import {
@@ -694,7 +696,8 @@ export function createApp(options = {}) {
       });
     }
 
-    if (!scope_summary || typeof scope_summary !== 'string' || scope_summary.trim().length < 3) {
+    const rawScope = req.body?.scope_summary || req.body?.scopeSummary;
+    if (!rawScope || typeof rawScope !== 'string' || rawScope.trim().length < 3) {
       return res.status(400).json({
         error: 'scope_summary es requerido y debe tener al menos 3 caracteres',
         code: 'INVALID_SCOPE_SUMMARY'
@@ -717,7 +720,7 @@ export function createApp(options = {}) {
         contactEmail: contact_email ? contact_email.trim() : null,
         contactPhone: contact_phone ? contact_phone.trim() : null,
         requestType: request_type,
-        scopeSummary: scope_summary.trim(),
+        scopeSummary: rawScope.trim(),
         urgency,
         confirmedByUserId: req.user.id
       });
@@ -904,6 +907,88 @@ export function createApp(options = {}) {
   };
 
   app.post('/api/leads/:id/drafts/:draftId/copy-confirm', requireAuth, handleCopyConfirmation);
+
+  // Operational Summary Endpoint (MVP-10)
+  app.get('/api/operational-summary', requireAuth, (req, res) => {
+    try {
+      const summary = getOperationalSummary(getDb());
+      res.json(summary);
+    } catch (err) {
+      res.status(500).json({ error: 'Error al obtener el resumen operativo', code: 'SUMMARY_FAILED' });
+    }
+  });
+
+  // Controlled Synthetic Demo Data Administration (MVP-13)
+  app.post('/api/admin/reset-demo-data', requireAuth, requireRole('ADMIN'), (req, res) => {
+    try {
+      const result = resetSyntheticDemoData(req.user.id, getDb());
+      const summary = getOperationalSummary(getDb());
+      res.json({
+        success: true,
+        message: 'Datos sintéticos de demostración restablecidos con éxito.',
+        result,
+        summary
+      });
+    } catch (err) {
+      res.status(err.code === 'FORBIDDEN_ROLE' ? 403 : 500).json({
+        error: err.message,
+        code: err.code || 'RESET_FAILED'
+      });
+    }
+  });
+
+  // Drafts: Manual draft creation/replacement without AI (MVP-11 Continuidad Manual)
+  app.post('/api/leads/:id/drafts/manual', requireAuth, (req, res) => {
+    const leadId = req.params.id;
+    const { draft_text } = req.body || {};
+
+    if (typeof draft_text !== 'string' || !draft_text.trim()) {
+      return res.status(400).json({
+        error: 'El texto del borrador manual es obligatorio',
+        code: 'INVALID_DRAFT_TEXT'
+      });
+    }
+
+    try {
+      const currentFacts = getCurrentConfirmedFactsByLeadId(leadId);
+      if (!currentFacts) {
+        return res.status(400).json({
+          error: 'No se puede crear un borrador sin hechos confirmados previos',
+          code: 'FACTS_REQUIRED'
+        });
+      }
+
+      const draft = saveResponseDraft({
+        leadId,
+        confirmedFactsVersion: currentFacts.version,
+        modelIdentifier: 'MANUAL_OPERATOR',
+        promptVersion: 'NONE',
+        initialDraftText: draft_text.trim(),
+        editedText: draft_text.trim(),
+        status: 'EDITED',
+        reviewedByUserId: req.user.id
+      });
+
+      appendAuditLog({
+        leadId,
+        eventType: 'DRAFT_CREATED_MANUAL',
+        entityType: 'DRAFT',
+        entityId: draft.id,
+        actorUserId: req.user.id,
+        newState: {
+          id: draft.id,
+          lead_id: leadId,
+          facts_version: currentFacts.version,
+          status: 'EDITED',
+          source: 'MANUAL_OPERATOR'
+        }
+      });
+
+      return res.status(201).json({ draft });
+    } catch (err) {
+      return res.status(500).json({ error: err.message, code: 'MANUAL_DRAFT_FAILED' });
+    }
+  });
 
   // Deprecated direct copy route: explicitly rejected with 410 to prevent bypassing copy-authorize and client writeText
   app.all('/api/leads/:id/drafts/:draftId/copy', (req, res) => {

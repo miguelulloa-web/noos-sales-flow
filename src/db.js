@@ -1209,6 +1209,35 @@ export function transitionOverdueActions(db = getDb(), serverNow = new Date(), a
  * - DISCARDED -> ARCHIVED
  */
 export function migrateLeadStatuses(db = getDb()) {
+  // Self-heal any tables that were affected by earlier rename attempts with _leads_legacy_migration
+  const legacyTables = db.prepare("SELECT name, sql FROM sqlite_master WHERE type='table' AND sql LIKE '%_leads_legacy_migration%'").all();
+  if (legacyTables && legacyTables.length > 0) {
+    db.exec('PRAGMA foreign_keys = OFF;');
+    let inFixTx = false;
+    try {
+      db.exec('BEGIN IMMEDIATE;');
+      inFixTx = true;
+      for (const t of legacyTables) {
+        const fixedSql = t.sql.replace(/REFERENCES\s+"?_leads_legacy_migration"?/g, 'REFERENCES leads');
+        const tempName = `${t.name}_repaired`;
+        const createTemp = fixedSql.replace(`CREATE TABLE ${t.name}`, `CREATE TABLE ${tempName}`);
+        db.exec(createTemp);
+        db.exec(`INSERT INTO ${tempName} SELECT * FROM ${t.name};`);
+        db.exec(`DROP TABLE ${t.name};`);
+        db.exec(`ALTER TABLE ${tempName} RENAME TO ${t.name};`);
+      }
+      db.exec('COMMIT;');
+      inFixTx = false;
+    } catch (err) {
+      if (inFixTx) {
+        try { db.exec('ROLLBACK;'); } catch (_) {}
+      }
+      throw err;
+    } finally {
+      db.exec('PRAGMA foreign_keys = ON;');
+    }
+  }
+
   const tableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='leads'").get();
   if (tableInfo && tableInfo.sql && (tableInfo.sql.includes("'CAPTURED'") || !tableInfo.sql.includes("'PENDING_TRIAGE'"))) {
     db.exec('PRAGMA foreign_keys = OFF;');
@@ -1815,4 +1844,215 @@ export function getLatestActionByLeadId(leadId, db = getDb(), now = new Date()) 
     ...action,
     effective_status: computeEffectiveActionStatus(action, now)
   };
+}
+
+/**
+ * Real Operational Summary (MVP-10)
+ * Grounded exclusively in actual database metrics, without fictitious sales numbers or arbitrary savings.
+ */
+export function getOperationalSummary(db = getDb()) {
+  const leadsStats = db.prepare(`
+    SELECT
+      COUNT(*) AS total_leads,
+      SUM(CASE WHEN status = 'PENDING_TRIAGE' THEN 1 ELSE 0 END) AS pending_triage,
+      SUM(CASE WHEN status = 'IN_REVIEW' THEN 1 ELSE 0 END) AS in_review,
+      SUM(CASE WHEN status = 'CONFIRMED' THEN 1 ELSE 0 END) AS confirmed,
+      SUM(CASE WHEN status = 'RESPONDED' THEN 1 ELSE 0 END) AS responded,
+      SUM(CASE WHEN status = 'ARCHIVED' THEN 1 ELSE 0 END) AS archived
+    FROM leads
+  `).get() || {};
+
+  const actionStats = db.prepare(`
+    SELECT
+      COUNT(*) AS total_actions,
+      SUM(CASE WHEN status IN ('PENDING', 'OVERDUE') THEN 1 ELSE 0 END) AS open_actions,
+      SUM(CASE WHEN status = 'OVERDUE' THEN 1 ELSE 0 END) AS overdue_actions,
+      SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END) AS completed_actions,
+      SUM(CASE WHEN status = 'CANCELLED' THEN 1 ELSE 0 END) AS cancelled_actions
+    FROM lead_actions
+  `).get() || {};
+
+  const aiStats = db.prepare(`
+    SELECT
+      COUNT(*) AS total_extractions,
+      SUM(CASE WHEN status IN ('FAILED', 'VALIDATION_ERROR', 'QUOTA_EXCEEDED', 'TIMEOUT') THEN 1 ELSE 0 END) AS observed_ai_errors,
+      SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END) AS successful_extractions,
+      ROUND(AVG(CASE WHEN status = 'SUCCESS' AND latency_ms > 0 THEN latency_ms ELSE NULL END)) AS avg_ai_latency_ms
+    FROM lead_extractions
+  `).get() || {};
+
+  const draftsStats = db.prepare(`
+    SELECT
+      COUNT(*) AS total_drafts,
+      SUM(CASE WHEN status = 'APPROVED_COPIED' THEN 1 ELSE 0 END) AS copied_drafts,
+      SUM(CASE WHEN status = 'STALE' THEN 1 ELSE 0 END) AS stale_drafts
+    FROM response_drafts
+  `).get() || {};
+
+  return {
+    totalLeads: Number(leadsStats.total_leads || 0),
+    pendingTriage: Number(leadsStats.pending_triage || 0),
+    inReview: Number(leadsStats.in_review || 0),
+    confirmed: Number(leadsStats.confirmed || 0),
+    responded: Number(leadsStats.responded || 0),
+    archived: Number(leadsStats.archived || 0),
+    inTracking: Number(leadsStats.confirmed || 0),
+    openActions: Number(actionStats.open_actions || 0),
+    overdueActions: Number(actionStats.overdue_actions || 0),
+    completedActions: Number(actionStats.completed_actions || 0),
+    cancelledActions: Number(actionStats.cancelled_actions || 0),
+    totalExtractions: Number(aiStats.total_extractions || 0),
+    successfulExtractions: Number(aiStats.successful_extractions || 0),
+    observedAiErrors: Number(aiStats.observed_ai_errors || 0),
+    avgAiLatencyMs: Number(aiStats.avg_ai_latency_ms || 0),
+    totalDrafts: Number(draftsStats.total_drafts || 0),
+    copiedDrafts: Number(draftsStats.copied_drafts || 0),
+    staleDrafts: Number(draftsStats.stale_drafts || 0)
+  };
+}
+
+/**
+ * Controlled Synthetic Demo Data Administration (MVP-13)
+ * Resets the demo dataset to a clean baseline state.
+ * Preserves users, configurations, and logs append-only audit trail.
+ */
+export function resetSyntheticDemoData(adminUserId, db = getDb()) {
+  const admin = db.prepare('SELECT id, name, role FROM users WHERE id = ?').get(adminUserId);
+  if (!admin || admin.role !== 'ADMIN') {
+    const err = new Error('Solo los usuarios con rol ADMIN pueden administrar y restablecer datos sintéticos de demostración.');
+    err.code = 'FORBIDDEN_ROLE';
+    throw err;
+  }
+
+  const now = new Date();
+  const nowIso = now.toISOString();
+
+  runInTransaction(db, () => {
+    // 1. Delete existing leads (child records cascade delete via foreign keys)
+    db.prepare('DELETE FROM leads').run();
+
+    // 2. Insert clean synthetic demo dataset
+    // Synthetic Lead 1: Solicitud Nueva en Revisión
+    const text1 = 'Hola equipo NoosAdvisory, les contacto desde Forestal del Sur SpA. Estamos buscando asesoría para optimizar nuestros flujos de licitación pública y procesos de compliance tributario. Necesitamos una cotización de alcance y plazos para presentar al directorio la próxima semana. Contacto: Rodrigo Morales, rmorales@forestaldelsur.cl, +56 9 8877 6655.';
+    const hash1 = crypto.createHash('sha256').update(text1).digest('hex');
+    const lead1Id = crypto.randomUUID();
+    db.prepare(`
+      INSERT INTO leads (
+        id, idempotency_key, text_hash, raw_text, source, status,
+        is_possible_duplicate, duplicate_of_lead_id, sender_name, sender_email,
+        company_name, created_by_user_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, 'MANUAL', 'IN_REVIEW', 0, NULL, ?, ?, ?, ?, ?, ?)
+    `).run(
+      lead1Id,
+      'demo-idemp-001',
+      hash1,
+      text1,
+      'Rodrigo Morales',
+      'rmorales@forestaldelsur.cl',
+      'Forestal del Sur SpA',
+      adminUserId,
+      nowIso,
+      nowIso
+    );
+
+    const ext1Id = crypto.randomUUID();
+    db.prepare(`
+      INSERT INTO lead_extractions (
+        id, lead_id, model_identifier, prompt_version, schema_version,
+        raw_response_json, structured_output_json, is_commercial,
+        confidence_score, request_type, scope_summary, urgency,
+        suggested_response_draft, latency_ms, retry_count, status, created_at
+      ) VALUES (?, ?, 'gemini-3.6-flash', 'v1.0', 'v1.0', '{}', '{}', 1, 'HIGH', 'QUOTE', 'Optimización de licitación pública y compliance tributario', 'MEDIUM', 'Estimado Rodrigo...', 1240, 0, 'SUCCESS', ?)
+    `).run(ext1Id, lead1Id, nowIso);
+
+    // Synthetic Lead 2: Solicitud con Hechos Confirmados y Respuesta Enviada
+    const text2 = 'Estimados consultores, soy Camila Arancibia de Retail Andino S.A. (c.arancibia@retailandino.cl). Requerimos propuesta comercial para diagnóstico estratégico de expansión omnicanal antes del 15 de octubre. Favor coordinar demo ejecutiva.';
+    const hash2 = crypto.createHash('sha256').update(text2).digest('hex');
+    const lead2Id = crypto.randomUUID();
+    db.prepare(`
+      INSERT INTO leads (
+        id, idempotency_key, text_hash, raw_text, source, status,
+        is_possible_duplicate, duplicate_of_lead_id, sender_name, sender_email,
+        company_name, created_by_user_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, 'MANUAL', 'RESPONDED', 0, NULL, ?, ?, ?, ?, ?, ?)
+    `).run(
+      lead2Id,
+      'demo-idemp-002',
+      hash2,
+      text2,
+      'Camila Arancibia',
+      'c.arancibia@retailandino.cl',
+      'Retail Andino S.A.',
+      adminUserId,
+      new Date(now.getTime() - 86400000).toISOString(),
+      nowIso
+    );
+
+    const fact2Id = crypto.randomUUID();
+    db.prepare(`
+      INSERT INTO lead_confirmed_facts (
+        id, lead_id, version, contact_name, company_name, contact_email, contact_phone,
+        request_type, scope_summary, urgency, confirmed_by_user_id, confirmed_at, is_current
+      ) VALUES (?, ?, 1, 'Camila Arancibia', 'Retail Andino S.A.', 'c.arancibia@retailandino.cl', NULL, 'DEMO', 'Diagnóstico estratégico de expansión omnicanal para Retail Andino', 'HIGH', ?, ?, 1)
+    `).run(fact2Id, lead2Id, adminUserId, nowIso);
+
+    const draft2Id = crypto.randomUUID();
+    db.prepare(`
+      INSERT INTO response_drafts (
+        id, lead_id, confirmed_facts_version, model_identifier, prompt_version,
+        initial_draft_text, edited_text, status, reviewed_by_user_id, created_at, updated_at
+      ) VALUES (?, ?, 1, 'gemini-3.6-flash', 'v1.0', 'Estimada Camila...', 'Estimada Camila, gracias por contactar a NoosAdvisory...', 'APPROVED_COPIED', ?, ?, ?)
+    `).run(draft2Id, lead2Id, adminUserId, nowIso, nowIso);
+
+    // Synthetic Lead 3: Solicitud en Seguimiento con Acción Comercial Activa
+    const text3 = 'Buen día, les escribe Juan Pablo Valenzuela de Logística Integrada Austral Ltda. (jpvalenzuela@logisticaaustral.cl). Deseamos contratar consultoría para la revisión integral de contratos con operadores portuarios. Es urgente para este mes.';
+    const hash3 = crypto.createHash('sha256').update(text3).digest('hex');
+    const lead3Id = crypto.randomUUID();
+    db.prepare(`
+      INSERT INTO leads (
+        id, idempotency_key, text_hash, raw_text, source, status,
+        is_possible_duplicate, duplicate_of_lead_id, sender_name, sender_email,
+        company_name, created_by_user_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, 'MANUAL', 'CONFIRMED', 0, NULL, ?, ?, ?, ?, ?, ?)
+    `).run(
+      lead3Id,
+      'demo-idemp-003',
+      hash3,
+      text3,
+      'Juan Pablo Valenzuela',
+      'jpvalenzuela@logisticaaustral.cl',
+      'Logística Integrada Austral Ltda.',
+      adminUserId,
+      new Date(now.getTime() - 43200000).toISOString(),
+      nowIso
+    );
+
+    const fact3Id = crypto.randomUUID();
+    db.prepare(`
+      INSERT INTO lead_confirmed_facts (
+        id, lead_id, version, contact_name, company_name, contact_email, contact_phone,
+        request_type, scope_summary, urgency, confirmed_by_user_id, confirmed_at, is_current
+      ) VALUES (?, ?, 1, 'Juan Pablo Valenzuela', 'Logística Integrada Austral Ltda.', 'jpvalenzuela@logisticaaustral.cl', NULL, 'QUOTE', 'Revisión integral de contratos con operadores portuarios', 'HIGH', ?, ?, 1)
+    `).run(fact3Id, lead3Id, adminUserId, nowIso);
+
+    const action3Id = crypto.randomUUID();
+    const tomorrowIso = new Date(now.getTime() + 86400000).toISOString();
+    db.prepare(`
+      INSERT INTO lead_actions (
+        id, lead_id, assigned_user_id, action_type, description, due_date, status, created_at, updated_at
+      ) VALUES (?, ?, ?, 'SEND_QUOTE', 'Enviar propuesta técnica y cotización formal de revisión contractual', ?, 'PENDING', ?, ?)
+    `).run(action3Id, lead3Id, adminUserId, tomorrowIso, nowIso, nowIso);
+
+    // Audit the reset
+    appendAuditLog({
+      eventType: 'DEMO_DATA_RESET',
+      entityType: 'SYSTEM',
+      entityId: 'SYNTHETIC_DATA',
+      actorUserId: adminUserId,
+      previousState: null,
+      newState: { leadsCreated: 3, resetAt: nowIso }
+    }, db);
+  });
+
+  return { success: true, count: 3, resetAt: nowIso };
 }

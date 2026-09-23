@@ -3,8 +3,8 @@ requirement: "MVP de Captura y Seguimiento Comercial con IA para NoosAdvisory ba
 modality: MUST
 type: MODIFICATION
 priority: HIGH
-status: IMPLEMENTING
-current_stage: IMPLEMENTING
+status: VALIDATING
+current_stage: VALIDATING
 owner: ORCHESTRATOR_PM
 decision_refs:
   - "Ruta A aprobada por Sponsor (2026-09-14)"
@@ -19,7 +19,7 @@ task_packets:
   - TP-02 (DONE)
   - TP-03 (DONE)
   - TP-04 (DONE)
-  - TP-05 (IMPLEMENTING)
+  - TP-05 (PENDING_VALIDATION)
 commits_or_prs:
   - "8f214f5 (feat: implement TP-01 local foundation, persistence, auth and audit log)"
   - "779a048 (fix(auth-db): enforce db triggers, exact origin matching, secure bootstrap and real blackbox tests)"
@@ -36,6 +36,8 @@ commits_or_prs:
   - "4c4e8b9 (fix(triage): harden browser validation, enforce strict clipboard match, and clarify secret traceability)"
   - "0686aaf (feat(tracking): implement TP-04 commercial tracking, inbox filters, timezone and safe exports)"
   - "3ec5b2a (fix(tracking): preserve foreign keys and validate DST-safe exports)"
+  - "254c4ef (docs(governance): accept TP-04 and authorize TP-05)"
+  - "6b05a3d (feat(tp05): implement end-to-end integration, operational summary, and demo readiness)"
 evidence:
   - "docs/aagm/02-solution-design/EV-003-solution-design.md"
   - "docs/aagm/03-planning/EV-004-planning.md"
@@ -43,8 +45,9 @@ evidence:
   - "docs/aagm/04-delivery/evidence/EV-TP-02.md"
   - "docs/aagm/04-delivery/evidence/EV-TP-03.md"
   - "docs/aagm/04-delivery/evidence/EV-TP-04.md"
+  - "docs/aagm/04-delivery/evidence/EV-TP-05.md"
 qa_ref: null
 release: null
 environment: DEV
 production_validation_ref: null
-next_action: "Implementar TP-05: Integración, Resumen Operativo, 18 Escenarios y Preparación de Demostración"
+next_action: "Revisión formal del Sponsor y validación de QA independiente sobre el candidato de entrega de TP-05 y evaluación del Release Gate de CHG-001"

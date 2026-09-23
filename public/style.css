@@ -725,4 +725,84 @@ body {
   .draft-actions .btn {
     width: 100%;
   }
+  .operational-summary-bar {
+    padding: 6px 10px;
+  }
+  .summary-chip {
+    min-width: 75px;
+    padding: 3px 6px;
+  }
+  .chip-val {
+    font-size: 13px;
+  }
+}
+
+/* Operational Summary Bar (MVP-10) */
+.operational-summary-bar {
+  background-color: #ffffff;
+  border-bottom: 1px solid var(--line-color);
+  padding: 8px 16px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.summary-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.summary-container::-webkit-scrollbar {
+  display: none;
+}
+
+.summary-chip {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 10px;
+  background-color: #f8fafc;
+  border: 1px solid var(--line-color);
+  border-radius: var(--radius-sm);
+  min-width: 90px;
+  flex-shrink: 0;
+}
+
+.chip-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+}
+
+.chip-val {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--primary-900);
+}
+
+.chip-val.chip-danger {
+  color: var(--danger-text);
+}
+
+.chip-val.chip-success {
+  color: var(--success-text);
+}
+
+.btn-refresh-summary {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* Empty Inbox State (MVP-14) */
+.empty-inbox-state {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
 }

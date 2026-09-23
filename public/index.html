@@ -22,6 +22,7 @@
     <div class="header-actions" id="authNavArea">
       <button class="btn btn-secondary" id="btnExportCsv" title="Exportar CSV de solicitudes y seguimiento">Exportar CSV</button>
       <button class="btn btn-secondary" id="btnExportJson" title="Exportar JSON estructurado">Exportar JSON</button>
+      <button class="btn btn-secondary" id="btnResetDemoData" style="display: none; border-color: #f59e0b; color: #b45309;" title="Administración de datos de prueba (exclusivo ADMIN)">Restablecer Demo</button>
       <button class="btn btn-primary" id="btnOpenNewLeadModal" aria-haspopup="dialog">+ Nueva Solicitud</button>
       <div class="user-pill" id="userPill" style="display: none;">
         <span id="userName">Operador</span>
@@ -30,6 +31,43 @@
       <button class="btn btn-secondary" id="btnLogout" style="display: none;">Cerrar sesión</button>
     </div>
   </header>
+
+  <!-- Operational Summary Bar (MVP-10) -->
+  <section class="operational-summary-bar" id="operationalSummaryBar" aria-label="Resumen Operativo en Tiempo Real" style="display: none;">
+    <div class="summary-container">
+      <div class="summary-chip" id="chipTotalLeads">
+        <span class="chip-label">Total Solicitudes</span>
+        <span class="chip-val" id="summaryTotalLeads">0</span>
+      </div>
+      <div class="summary-chip" id="chipInReview">
+        <span class="chip-label">En Revisión</span>
+        <span class="chip-val" id="summaryInReview">0</span>
+      </div>
+      <div class="summary-chip" id="chipInTracking">
+        <span class="chip-label">En Seguimiento</span>
+        <span class="chip-val" id="summaryInTracking">0</span>
+      </div>
+      <div class="summary-chip" id="chipOverdue">
+        <span class="chip-label">Vencidas</span>
+        <span class="chip-val chip-danger" id="summaryOverdue">0</span>
+      </div>
+      <div class="summary-chip" id="chipResponded">
+        <span class="chip-label">Respondidas</span>
+        <span class="chip-val chip-success" id="summaryResponded">0</span>
+      </div>
+      <div class="summary-chip" id="chipAiErrors">
+        <span class="chip-label">Errores IA</span>
+        <span class="chip-val" id="summaryAiErrors">0</span>
+      </div>
+      <div class="summary-chip" id="chipAiLatency">
+        <span class="chip-label">Latencia IA Prom.</span>
+        <span class="chip-val" id="summaryAvgLatency">0 ms</span>
+      </div>
+      <button class="btn btn-secondary btn-refresh-summary" id="btnRefreshSummary" title="Actualizar métricas operativas" style="padding: 4px 8px; font-size: 11px;">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"></path></svg>
+      </button>
+    </div>
+  </section>
 
   <!-- Login Modal / Screen (shown if not authenticated) -->
   <div class="modal-overlay" id="loginModal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
@@ -164,6 +202,9 @@
               </div>
               <span class="badge badge-status" id="aiModelBadge">gemini-3.6-flash</span>
             </div>
+            <div id="aiContingencyNotice" style="display: none; background: #fffbeb; border: 1px solid #fde68a; color: #92400e; padding: 8px 12px; border-radius: var(--radius-sm); font-size: 12px; margin-bottom: 8px;" role="status">
+              ⚠️ <strong>Continuidad Manual (IA No Disponible):</strong> La extracción asistida no se completó (contingencia/cuota). Puede completar y confirmar los hechos comerciales manualmente abajo.
+            </div>
             <div style="display: flex; gap: 12px; font-size: 12px;">
               <span>Certeza: <strong id="aiConfidenceScore">-</strong></span>
               <span>Comercial: <strong id="aiIsCommercial">-</strong></span>
@@ -269,6 +310,7 @@
             <textarea class="draft-textarea" id="draftTextarea" placeholder="No se ha generado un borrador aún. Confirme los hechos del lead y haga clic en 'Generar Borrador con IA'." aria-label="Texto del borrador de respuesta comercial"></textarea>
 
             <div class="draft-actions">
+              <button class="btn btn-secondary" id="btnCreateManualDraft" style="display: inline-flex;" title="Redactar o editar borrador sin invocar IA (Continuidad Manual)">Redactar Manualmente</button>
               <button class="btn btn-secondary" id="btnSaveDraftEdit" disabled>Guardar Ajustes Manuales</button>
               <button class="btn btn-primary" id="btnGenerateDraft">
                 <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"></path></svg>
@@ -418,6 +460,29 @@
 
   <!-- Toast for User Feedback -->
   <div class="toast" id="appToast" style="display: none;" role="status" aria-live="polite"></div>
+
+  <!-- Controlled Demo Data Reset Modal (MVP-13) -->
+  <div class="modal-overlay" id="resetDemoModal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="resetDemoTitle">
+    <div class="modal-card" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 id="resetDemoTitle" style="color: #b45309; display: flex; align-items: center; gap: 8px;">
+          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"></path></svg>
+          Restablecer Datos de Demostración
+        </h3>
+        <button type="button" class="btn btn-secondary" id="btnCloseResetDemoModal" style="padding: 4px 8px;">&times;</button>
+      </div>
+      <p style="font-size: 13px; color: var(--text-muted); line-height: 1.5; margin: 12px 0;">
+        Esta acción restablece el catálogo sintético de demostración con 3 solicitudes estructuradas en distintos estados comerciales para pruebas.
+      </p>
+      <div style="background: #fffbeb; border: 1px solid #fde68a; padding: 10px 14px; border-radius: var(--radius-sm); font-size: 12px; color: #92400e; margin-bottom: 14px;">
+        <strong>Garantía de Integridad:</strong> Los usuarios existentes y el registro inmutable de auditoría (<code>audit_log</code>) se conservan intactos. Se registrará un evento auditable <code>DEMO_DATA_RESET</code>.
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" class="btn btn-secondary" id="btnCancelResetDemo">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="btnConfirmResetDemo" style="background-color: #d97706; border-color: #b45309;">Sí, Restablecer Conjunto de Prueba</button>
+      </div>
+    </div>
+  </div>
 
   <script type="module" src="app.js"></script>
 </body>

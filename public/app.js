@@ -123,6 +123,28 @@ import { executeDraftCopy } from './clipboard_workflow.js';
   const btnCancelCompleteAction = document.getElementById('btnCancelCompleteAction');
   const actionsHistoryContainer = document.getElementById('actionsHistoryContainer');
 
+  // Operational Summary Bar (MVP-10)
+  const operationalSummaryBar = document.getElementById('operationalSummaryBar');
+  const summaryTotalLeads = document.getElementById('summaryTotalLeads');
+  const summaryInReview = document.getElementById('summaryInReview');
+  const summaryInTracking = document.getElementById('summaryInTracking');
+  const summaryOverdue = document.getElementById('summaryOverdue');
+  const summaryResponded = document.getElementById('summaryResponded');
+  const summaryAiErrors = document.getElementById('summaryAiErrors');
+  const summaryAvgLatency = document.getElementById('summaryAvgLatency');
+  const btnRefreshSummary = document.getElementById('btnRefreshSummary');
+
+  // Admin Reset Modal (MVP-13)
+  const btnResetDemoData = document.getElementById('btnResetDemoData');
+  const resetDemoModal = document.getElementById('resetDemoModal');
+  const btnCloseResetDemoModal = document.getElementById('btnCloseResetDemoModal');
+  const btnCancelResetDemo = document.getElementById('btnCancelResetDemo');
+  const btnConfirmResetDemo = document.getElementById('btnConfirmResetDemo');
+
+  // Contingency & Manual Draft (MVP-11)
+  const aiContingencyNotice = document.getElementById('aiContingencyNotice');
+  const btnCreateManualDraft = document.getElementById('btnCreateManualDraft');
+
   function showToast(message, duration = 3500) {
     appToast.textContent = message;
     appToast.style.display = 'flex';
@@ -157,8 +179,10 @@ import { executeDraftCopy } from './clipboard_workflow.js';
       loginModal.style.display = 'none';
       await loadOperators();
       await loadLeads();
+      await fetchOperationalSummary();
     } else {
       currentUser = null;
+      renderUserSession();
       loginModal.style.display = 'flex';
     }
   }
@@ -169,9 +193,40 @@ import { executeDraftCopy } from './clipboard_workflow.js';
       userRole.textContent = currentUser.role;
       userPill.style.display = 'flex';
       btnLogout.style.display = 'inline-flex';
+      if (btnResetDemoData) {
+        btnResetDemoData.style.display = currentUser.role === 'ADMIN' ? 'inline-flex' : 'none';
+      }
     } else {
       userPill.style.display = 'none';
       btnLogout.style.display = 'none';
+      if (btnResetDemoData) btnResetDemoData.style.display = 'none';
+      if (operationalSummaryBar) operationalSummaryBar.style.display = 'none';
+    }
+  }
+
+  // Real Operational Summary (MVP-10)
+  async function fetchOperationalSummary() {
+    if (!currentUser) return;
+    try {
+      const res = await apiRequest('/api/operational-summary');
+      if (!res.ok || !res.data) return;
+      const data = res.data;
+      if (summaryTotalLeads) summaryTotalLeads.textContent = data.totalLeads ?? 0;
+      if (summaryInReview) summaryInReview.textContent = ((data.pendingTriage || 0) + (data.inReview || 0));
+      if (summaryInTracking) summaryInTracking.textContent = data.confirmed ?? 0;
+      if (summaryOverdue) {
+        summaryOverdue.textContent = data.overdueActions ?? 0;
+        summaryOverdue.className = (data.overdueActions > 0) ? 'chip-val chip-danger' : 'chip-val';
+      }
+      if (summaryResponded) summaryResponded.textContent = ((data.responded || 0) + (data.archived || 0));
+      if (summaryAiErrors) {
+        summaryAiErrors.textContent = data.observedAiErrors ?? 0;
+        summaryAiErrors.className = (data.observedAiErrors > 0) ? 'chip-val chip-danger' : 'chip-val';
+      }
+      if (summaryAvgLatency) summaryAvgLatency.textContent = data.avgAiLatencyMs > 0 ? `${data.avgAiLatencyMs} ms` : '—';
+      if (operationalSummaryBar) operationalSummaryBar.style.display = 'block';
+    } catch (e) {
+      console.warn('Error fetching operational summary:', e);
     }
   }
 
@@ -193,6 +248,7 @@ import { executeDraftCopy } from './clipboard_workflow.js';
       showToast(`Bienvenido, ${currentUser.name}`);
       await loadOperators();
       await loadLeads();
+      await fetchOperationalSummary();
     } else {
       loginError.textContent = res.data?.error || 'Credenciales inválidas';
       loginError.style.display = 'block';
@@ -416,11 +472,23 @@ import { executeDraftCopy } from './clipboard_workflow.js';
       aiIsCommercial.textContent = extraction.is_commercial ? 'Sí' : 'No';
       aiRetryCount.textContent = extraction.retry_count || 0;
       leadUrgencyBadge.textContent = `URGENCIA: ${extraction.urgency || 'MEDIA'}`;
+      if (['FAILED', 'QUOTA_EXCEEDED', 'TIMEOUT', 'VALIDATION_ERROR'].includes(extraction.status)) {
+        if (aiContingencyNotice) {
+          aiContingencyNotice.style.display = 'block';
+          aiContingencyNotice.innerHTML = `⚠️ <strong>Continuidad Manual (IA en Contingencia):</strong> Extracción registrada como <code>${escapeHtml(extraction.status)}</code> (${escapeHtml(extraction.error_message || 'Sin respuesta estructurada')}). Puede completar y confirmar los hechos comerciales manualmente abajo.`;
+        }
+      } else {
+        if (aiContingencyNotice) aiContingencyNotice.style.display = 'none';
+      }
     } else {
       aiModelBadge.textContent = 'Sin extracción';
       aiConfidenceScore.textContent = '-';
       aiIsCommercial.textContent = '-';
       aiRetryCount.textContent = '0';
+      if (aiContingencyNotice) {
+        aiContingencyNotice.style.display = 'block';
+        aiContingencyNotice.innerHTML = `ℹ️ <strong>Continuidad Manual:</strong> Solicitud sin extracción automática. Complete y confirme los hechos abajo para avanzar.`;
+      }
     }
 
     // Evidence citations
@@ -488,7 +556,15 @@ import { executeDraftCopy } from './clipboard_workflow.js';
       btnSaveDraftEdit.disabled = true;
       btnCopyDraft.disabled = true;
       btnGenerateDraftLabel.textContent = 'Generar Borrador con IA';
+      if (btnCreateManualDraft) {
+        btnCreateManualDraft.disabled = !currentFacts;
+        btnCreateManualDraft.style.display = 'inline-flex';
+      }
       return;
+    }
+
+    if (btnCreateManualDraft) {
+      btnCreateManualDraft.style.display = 'none';
     }
 
     draftTextarea.disabled = false;
@@ -800,10 +876,9 @@ import { executeDraftCopy } from './clipboard_workflow.js';
     }
   });
 
-  // Save Manual Draft Edit
+  // Save Manual Draft Edit (Supports updating existing draft and manual draft creation without AI)
   btnSaveDraftEdit.addEventListener('click', async () => {
-    if (!activeLeadId || !activeLeadData?.current_draft) return;
-    const draftId = activeLeadData.current_draft.id;
+    if (!activeLeadId) return;
     const editedText = draftTextarea.value.trim();
 
     if (!editedText) {
@@ -811,18 +886,52 @@ import { executeDraftCopy } from './clipboard_workflow.js';
       return;
     }
 
-    const res = await apiRequest(`/api/leads/${activeLeadId}/drafts/${draftId}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ edited_text: editedText })
-    });
+    if (activeLeadData?.current_draft) {
+      const draftId = activeLeadData.current_draft.id;
+      const res = await apiRequest(`/api/leads/${activeLeadId}/drafts/${draftId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ edited_text: editedText })
+      });
 
-    if (res.ok && res.data?.draft) {
-      showToast('Ajustes del borrador guardados');
-      await selectLead(activeLeadId);
+      if (res.ok && res.data?.draft) {
+        showToast('Ajustes del borrador guardados');
+        await selectLead(activeLeadId);
+        await fetchOperationalSummary();
+      } else {
+        showToast(`Error al guardar edición: ${res.data?.error || 'Desconocido'}`);
+      }
     } else {
-      showToast(`Error al guardar edición: ${res.data?.error || 'Desconocido'}`);
+      // Manual creation without AI (MVP-11)
+      const res = await apiRequest(`/api/leads/${activeLeadId}/drafts/manual`, {
+        method: 'POST',
+        body: JSON.stringify({ draft_text: editedText })
+      });
+
+      if (res.ok && res.data?.draft) {
+        showToast('Borrador manual creado con éxito');
+        await selectLead(activeLeadId);
+        await fetchOperationalSummary();
+      } else {
+        showToast(`Error al crear borrador: ${res.data?.error || 'Desconocido'}`);
+      }
     }
   });
+
+  // Manual Draft Creation trigger
+  if (btnCreateManualDraft) {
+    btnCreateManualDraft.addEventListener('click', () => {
+      if (!activeLeadData?.current_confirmed_facts) {
+        showToast('Debe confirmar los hechos del lead antes de redactar un borrador.');
+        return;
+      }
+      draftTextarea.disabled = false;
+      draftTextarea.value = '';
+      draftTextarea.placeholder = 'Redacte aquí la propuesta o respuesta comercial formal...';
+      draftTextarea.focus();
+      btnSaveDraftEdit.disabled = false;
+      showToast('Modo manual activo: escriba la propuesta y guarde los ajustes.');
+    });
+  }
 
   // Copy Draft to Clipboard
   btnCopyDraft.addEventListener('click', async () => {
@@ -883,11 +992,65 @@ import { executeDraftCopy } from './clipboard_workflow.js';
       closeNewLeadModal();
       await loadLeads();
       await selectLead(res.data.lead.id);
+      await fetchOperationalSummary();
     } else {
       newLeadError.textContent = res.data?.error || 'Error al procesar la solicitud';
       newLeadError.style.display = 'block';
     }
   });
+
+  // Admin Controlled Demo Data Reset (MVP-13)
+  if (btnResetDemoData) {
+    btnResetDemoData.addEventListener('click', () => {
+      if (resetDemoModal) resetDemoModal.style.display = 'flex';
+    });
+  }
+  if (btnCloseResetDemoModal) {
+    btnCloseResetDemoModal.addEventListener('click', () => {
+      if (resetDemoModal) resetDemoModal.style.display = 'none';
+    });
+  }
+  if (btnCancelResetDemo) {
+    btnCancelResetDemo.addEventListener('click', () => {
+      if (resetDemoModal) resetDemoModal.style.display = 'none';
+    });
+  }
+  if (btnConfirmResetDemo) {
+    btnConfirmResetDemo.addEventListener('click', async () => {
+      btnConfirmResetDemo.disabled = true;
+      btnConfirmResetDemo.textContent = 'Restableciendo...';
+      try {
+        const res = await apiRequest('/api/admin/reset-demo-data', {
+          method: 'POST'
+        });
+        if (res.ok) {
+          showToast('Catálogo de prueba restablecido con éxito');
+          if (resetDemoModal) resetDemoModal.style.display = 'none';
+          activeLeadId = null;
+          activeLeadData = null;
+          emptyDetailState.style.display = 'block';
+          activeDetailContent.style.display = 'none';
+          await loadLeads();
+          await fetchOperationalSummary();
+        } else {
+          showToast(`Error al restablecer: ${res.data?.error || 'Acción no permitida'}`);
+        }
+      } catch (err) {
+        showToast('Error de conexión al restablecer datos');
+      } finally {
+        btnConfirmResetDemo.disabled = false;
+        btnConfirmResetDemo.textContent = 'Sí, Restablecer Conjunto de Prueba';
+      }
+    });
+  }
+
+  // Refresh Operational Summary button
+  if (btnRefreshSummary) {
+    btnRefreshSummary.addEventListener('click', async () => {
+      await fetchOperationalSummary();
+      showToast('Resumen operativo actualizado');
+    });
+  }
 
   // Filter & Search events
   searchLeadsInput.addEventListener('input', debounce(loadLeads, 300));
