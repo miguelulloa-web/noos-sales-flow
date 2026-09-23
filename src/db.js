@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
+import { parseDueDateToUtc, isActionOverdue } from './time_service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -89,7 +90,7 @@ export function initSchema(db = getDb()) {
       text_hash TEXT NOT NULL,
       raw_text TEXT NOT NULL,
       source TEXT NOT NULL DEFAULT 'MANUAL',
-      status TEXT NOT NULL DEFAULT 'CAPTURED' CHECK(status IN ('CAPTURED', 'ANALYZED', 'TRIAGED', 'ACTIONABLE', 'DISCARDED')),
+      status TEXT NOT NULL DEFAULT 'PENDING_TRIAGE' CHECK(status IN ('PENDING_TRIAGE', 'IN_REVIEW', 'CONFIRMED', 'RESPONDED', 'ARCHIVED', 'CAPTURED', 'ANALYZED', 'TRIAGED', 'ACTIONABLE', 'DISCARDED')),
       is_possible_duplicate INTEGER NOT NULL DEFAULT 0,
       duplicate_of_lead_id TEXT,
       sender_name TEXT,
@@ -173,6 +174,24 @@ export function initSchema(db = getDb()) {
       FOREIGN KEY (reviewed_by_user_id) REFERENCES users(id)
     );
 
+    CREATE TABLE IF NOT EXISTS lead_actions (
+      id TEXT PRIMARY KEY,
+      lead_id TEXT NOT NULL,
+      assigned_user_id TEXT NOT NULL,
+      action_type TEXT NOT NULL CHECK(action_type IN ('SEND_QUOTE', 'CALL_PROSPECT', 'REQUEST_CLARIFICATION', 'SCHEDULE_DEMO', 'FOLLOW_UP')),
+      description TEXT NOT NULL,
+      due_date TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('PENDING', 'COMPLETED', 'CANCELLED', 'OVERDUE')),
+      result_summary TEXT,
+      completed_by_user_id TEXT,
+      completed_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE,
+      FOREIGN KEY (assigned_user_id) REFERENCES users(id),
+      FOREIGN KEY (completed_by_user_id) REFERENCES users(id)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_sessions_token_hash ON auth_sessions(session_token_hash);
     CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON auth_sessions(user_id);
     CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log(entity_type, entity_id);
@@ -188,6 +207,11 @@ export function initSchema(db = getDb()) {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_confirmed_facts_unique_current ON lead_confirmed_facts(lead_id) WHERE is_current = 1;
     CREATE INDEX IF NOT EXISTS idx_response_drafts_lead ON response_drafts(lead_id);
     CREATE INDEX IF NOT EXISTS idx_response_drafts_status ON response_drafts(status);
+    CREATE INDEX IF NOT EXISTS idx_lead_actions_lead ON lead_actions(lead_id);
+    CREATE INDEX IF NOT EXISTS idx_lead_actions_status ON lead_actions(status);
+    CREATE INDEX IF NOT EXISTS idx_lead_actions_due_date ON lead_actions(due_date);
+    CREATE INDEX IF NOT EXISTS idx_lead_actions_assigned ON lead_actions(assigned_user_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_lead_actions_unique_open ON lead_actions(lead_id) WHERE status IN ('PENDING', 'OVERDUE');
 
     -- Enforce append-only integrity at SQLite engine level: forbid UPDATE and DELETE
     CREATE TRIGGER IF NOT EXISTS prevent_audit_log_update
@@ -202,6 +226,9 @@ export function initSchema(db = getDb()) {
       SELECT RAISE(ABORT, 'audit_log is strictly append-only: DELETE operations are forbidden');
     END;
   `);
+
+  // Run migration from legacy to canonical lead statuses
+  migrateLeadStatuses(db);
 
   // Seed default AI configs if not present
   const checkConfig = db.prepare('SELECT id, model_identifier FROM ai_config WHERE config_key = ?').get('LEAD_EXTRACTION_CONFIG');
@@ -391,7 +418,7 @@ export function createLead({
   textHash,
   rawText,
   source = 'MANUAL',
-  status = 'CAPTURED',
+  status = 'PENDING_TRIAGE',
   isPossibleDuplicate = 0,
   duplicateOfLeadId = null,
   senderName = null,
@@ -684,10 +711,10 @@ export function saveConfirmedFacts(params, db = getDb()) {
     `).run(now, leadId, nextVersion);
     staleDraftsCount = staleResult.changes;
 
-    // 6. Update lead status to TRIAGED while keeping raw_text intact
+    // 6. Update lead status to CONFIRMED while keeping raw_text intact
     db.prepare(`
       UPDATE leads
-      SET status = CASE WHEN status IN ('CAPTURED', 'ANALYZED') THEN 'TRIAGED' ELSE status END,
+      SET status = CASE WHEN status IN ('CAPTURED', 'ANALYZED', 'PENDING_TRIAGE', 'IN_REVIEW') THEN 'CONFIRMED' ELSE status END,
           sender_name = COALESCE(?, sender_name),
           company_name = COALESCE(?, company_name),
           sender_email = COALESCE(?, sender_email),
@@ -938,6 +965,13 @@ export function markDraftCopied({ draftId, leadId = null, reviewedByUserId }, db
     WHERE id = ?
   `).run(reviewedByUserId, now, draftId);
 
+  // Update lead status to RESPONDED upon successful draft approval/copy
+  db.prepare(`
+    UPDATE leads
+    SET status = 'RESPONDED', updated_at = ?
+    WHERE id = ?
+  `).run(now, current.lead_id);
+
   const updated = getDraftById(draftId, db);
 
   appendAuditLog({
@@ -953,15 +987,30 @@ export function markDraftCopied({ draftId, leadId = null, reviewedByUserId }, db
   return updated;
 }
 
-// Master Triage list query with related statuses
-export function listLeadsWithTriageSummary({ limit = 50, offset = 0, status = null, search = null } = {}, db = getDb()) {
+// Master Triage list query with related statuses and commercial actions
+export function listLeadsWithTriageSummary({
+  limit = 50,
+  offset = 0,
+  status = null,
+  filter = null,
+  search = null,
+  now = new Date()
+} = {}, db = getDb()) {
   let query = `
     SELECT l.*,
            e.status as extraction_status,
            e.confidence_score as extraction_confidence,
            f.version as confirmed_facts_version,
            d.status as draft_status,
-           d.confirmed_facts_version as draft_facts_version
+           d.confirmed_facts_version as draft_facts_version,
+           act.id as latest_action_id,
+           act.action_type as latest_action_type,
+           act.description as latest_action_description,
+           act.due_date as latest_action_due_date,
+           act.status as latest_action_status,
+           act.result_summary as latest_action_result,
+           u.name as assigned_user_name,
+           u.id as assigned_user_id
     FROM leads l
     LEFT JOIN lead_extractions e ON e.id = (
       SELECT id FROM lead_extractions WHERE lead_id = l.id ORDER BY created_at DESC LIMIT 1
@@ -972,6 +1021,10 @@ export function listLeadsWithTriageSummary({ limit = 50, offset = 0, status = nu
     LEFT JOIN response_drafts d ON d.id = (
       SELECT id FROM response_drafts WHERE lead_id = l.id ORDER BY created_at DESC LIMIT 1
     )
+    LEFT JOIN lead_actions act ON act.id = (
+      SELECT id FROM lead_actions WHERE lead_id = l.id ORDER BY created_at DESC LIMIT 1
+    )
+    LEFT JOIN users u ON u.id = act.assigned_user_id
   `;
   const conditions = [];
   const params = [];
@@ -980,6 +1033,20 @@ export function listLeadsWithTriageSummary({ limit = 50, offset = 0, status = nu
     conditions.push('l.status = ?');
     params.push(status);
   }
+
+  const nowIso = now.toISOString();
+
+  // Filter tabs: pending, overdue, duplicates, all
+  if (filter === 'pending') {
+    conditions.push("act.status = 'PENDING' AND act.due_date >= ?");
+    params.push(nowIso);
+  } else if (filter === 'overdue') {
+    conditions.push("(act.status = 'OVERDUE' OR (act.status = 'PENDING' AND act.due_date < ?))");
+    params.push(nowIso);
+  } else if (filter === 'duplicates') {
+    conditions.push('l.is_possible_duplicate = 1');
+  }
+
   if (search) {
     conditions.push('(l.company_name LIKE ? OR l.sender_name LIKE ? OR l.sender_email LIKE ? OR l.raw_text LIKE ?)');
     const term = `%${search.trim()}%`;
@@ -993,7 +1060,592 @@ export function listLeadsWithTriageSummary({ limit = 50, offset = 0, status = nu
   query += ' ORDER BY l.created_at DESC LIMIT ? OFFSET ?';
   params.push(limit, offset);
 
-  return db.prepare(query).all(...params);
+  const rows = db.prepare(query).all(...params);
+  return rows.map(r => ({
+    ...r,
+    latest_action_effective_status: r.latest_action_status ? computeEffectiveActionStatus({
+      status: r.latest_action_status,
+      due_date: r.latest_action_due_date
+    }, now) : null
+  }));
 }
 
+// ----------------------------------------------------------------------------
+// TP-04: Lead Actions & Commercial Tracking
+// ----------------------------------------------------------------------------
 
+export const VALID_ACTION_TYPES = [
+  'SEND_QUOTE',
+  'CALL_PROSPECT',
+  'REQUEST_CLARIFICATION',
+  'SCHEDULE_DEMO',
+  'FOLLOW_UP'
+];
+
+export const VALID_ACTION_STATUSES = [
+  'PENDING',
+  'COMPLETED',
+  'CANCELLED',
+  'OVERDUE'
+];
+
+export const VALID_LEAD_STATUSES = [
+  'PENDING_TRIAGE',
+  'IN_REVIEW',
+  'CONFIRMED',
+  'RESPONDED',
+  'ARCHIVED'
+];
+
+export function listActiveUsers(db = getDb()) {
+  return db.prepare('SELECT id, name, email, role FROM users WHERE is_active = 1 ORDER BY name ASC').all();
+}
+
+/**
+ * Calculates effective action status based strictly on server clock.
+ */
+export function computeEffectiveActionStatus(action, now = new Date()) {
+  if (!action) return null;
+  if (action.status === 'PENDING') {
+    if (isActionOverdue(action.due_date, now)) {
+      return 'OVERDUE';
+    }
+  }
+  return action.status;
+}
+
+/**
+ * Helper to run a callback inside an explicit immediate transaction.
+ * Supports re-entrant transaction calls safely.
+ */
+export function runInTransaction(db, fn) {
+  if (db._inTransaction) {
+    return fn();
+  }
+  db._inTransaction = true;
+  db.exec('BEGIN IMMEDIATE;');
+  try {
+    const res = fn();
+    db.exec('COMMIT;');
+    db._inTransaction = false;
+    return res;
+  } catch (err) {
+    try {
+      db.exec('ROLLBACK;');
+    } catch (_) {}
+    db._inTransaction = false;
+    throw err;
+  }
+}
+
+/**
+ * Performs a transactional, idempotent transition of overdue PENDING actions to OVERDUE.
+ * Affects strictly overdue actions based on server clock, preserves history, and registers in audit_log.
+ *
+ * @param {object} [db=getDb()]
+ * @param {Date} [serverNow=new Date()]
+ * @param {string} [actorUserId='system']
+ * @returns {{ count: number, actions: Array<string> }}
+ */
+export function transitionOverdueActions(db = getDb(), serverNow = new Date(), actorUserId = 'system') {
+  const serverNowIso = serverNow.toISOString();
+
+  return runInTransaction(db, () => {
+    // Select strictly overdue actions that are currently PENDING
+    const overdueActions = db.prepare(`
+      SELECT * FROM lead_actions
+      WHERE status = 'PENDING' AND due_date < ?
+    `).all(serverNowIso);
+
+    if (overdueActions.length === 0) {
+      return { count: 0, actions: [] };
+    }
+
+    const updateStmt = db.prepare(`
+      UPDATE lead_actions
+      SET status = 'OVERDUE', updated_at = ?
+      WHERE id = ? AND status = 'PENDING'
+    `);
+
+    for (const action of overdueActions) {
+      updateStmt.run(serverNowIso, action.id);
+
+      appendAuditLog({
+        leadId: action.lead_id,
+        eventType: 'ACTION_MARKED_OVERDUE',
+        entityType: 'lead_actions',
+        entityId: action.id,
+        previousState: { status: 'PENDING', due_date: action.due_date },
+        newState: {
+          status: 'OVERDUE',
+          due_date: action.due_date,
+          transitioned_at: serverNowIso
+        },
+        actorUserId
+      }, db);
+    }
+
+    return {
+      count: overdueActions.length,
+      actions: overdueActions.map(a => a.id)
+    };
+  });
+}
+
+/**
+ * Compatible and verifiable migration function from legacy lead statuses to canonical contract:
+ * - CAPTURED -> PENDING_TRIAGE
+ * - ANALYZED -> IN_REVIEW
+ * - TRIAGED -> CONFIRMED
+ * - ACTIONABLE -> CONFIRMED
+ * - DISCARDED -> ARCHIVED
+ */
+export function migrateLeadStatuses(db = getDb()) {
+  const tableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='leads'").get();
+  if (tableInfo && tableInfo.sql && !tableInfo.sql.includes('PENDING_TRIAGE')) {
+    db.exec('PRAGMA foreign_keys = OFF;');
+    db.exec(`
+      ALTER TABLE leads RENAME TO _leads_legacy_migration;
+
+      CREATE TABLE leads (
+        id TEXT PRIMARY KEY,
+        idempotency_key TEXT UNIQUE NOT NULL,
+        text_hash TEXT NOT NULL,
+        raw_text TEXT NOT NULL,
+        source TEXT NOT NULL DEFAULT 'MANUAL',
+        status TEXT NOT NULL DEFAULT 'PENDING_TRIAGE' CHECK(status IN ('PENDING_TRIAGE', 'IN_REVIEW', 'CONFIRMED', 'RESPONDED', 'ARCHIVED', 'CAPTURED', 'ANALYZED', 'TRIAGED', 'ACTIONABLE', 'DISCARDED')),
+        is_possible_duplicate INTEGER NOT NULL DEFAULT 0,
+        duplicate_of_lead_id TEXT,
+        sender_name TEXT,
+        sender_email TEXT,
+        company_name TEXT,
+        created_by_user_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (duplicate_of_lead_id) REFERENCES leads(id) ON DELETE SET NULL,
+        FOREIGN KEY (created_by_user_id) REFERENCES users(id)
+      );
+
+      INSERT INTO leads (
+        id, idempotency_key, text_hash, raw_text, source, status,
+        is_possible_duplicate, duplicate_of_lead_id, sender_name, sender_email,
+        company_name, created_by_user_id, created_at, updated_at
+      )
+      SELECT
+        id, idempotency_key, text_hash, raw_text, source,
+        CASE status
+          WHEN 'CAPTURED' THEN 'PENDING_TRIAGE'
+          WHEN 'ANALYZED' THEN 'IN_REVIEW'
+          WHEN 'TRIAGED' THEN 'CONFIRMED'
+          WHEN 'ACTIONABLE' THEN 'CONFIRMED'
+          WHEN 'DISCARDED' THEN 'ARCHIVED'
+          ELSE status
+        END,
+        is_possible_duplicate, duplicate_of_lead_id, sender_name, sender_email,
+        company_name, created_by_user_id, created_at, updated_at
+      FROM _leads_legacy_migration;
+
+      DROP TABLE _leads_legacy_migration;
+
+      CREATE INDEX IF NOT EXISTS idx_leads_idempotency_key ON leads(idempotency_key);
+      CREATE INDEX IF NOT EXISTS idx_leads_text_hash ON leads(text_hash);
+      CREATE INDEX IF NOT EXISTS idx_leads_sender_email ON leads(sender_email);
+      CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
+    `);
+    db.exec('PRAGMA foreign_keys = ON;');
+  }
+
+  return runInTransaction(db, () => {
+    const resCaptured = db.prepare("UPDATE leads SET status = 'PENDING_TRIAGE' WHERE status = 'CAPTURED'").run();
+    const resAnalyzed = db.prepare("UPDATE leads SET status = 'IN_REVIEW' WHERE status = 'ANALYZED'").run();
+    const resTriaged = db.prepare("UPDATE leads SET status = 'CONFIRMED' WHERE status IN ('TRIAGED', 'ACTIONABLE')").run();
+    const resDiscarded = db.prepare("UPDATE leads SET status = 'ARCHIVED' WHERE status = 'DISCARDED'").run();
+
+    return {
+      migratedCaptured: resCaptured.changes,
+      migratedAnalyzed: resAnalyzed.changes,
+      migratedTriaged: resTriaged.changes,
+      migratedDiscarded: resDiscarded.changes
+    };
+  });
+}
+
+/**
+ * Creates a commercial action for a lead.
+ * Enforces single open action (PENDING or OVERDUE) constraint at application and database level.
+ * Does NOT set or alter lead status to ACTIONABLE.
+ */
+export function createLeadAction({
+  leadId,
+  assignedUserId,
+  actionType,
+  description,
+  dueDate,
+  actorUserId
+}, db = getDb(), now = new Date()) {
+  if (!leadId) {
+    const err = new Error('leadId es requerido');
+    err.code = 'INVALID_LEAD_ID';
+    throw err;
+  }
+  if (!assignedUserId || typeof assignedUserId !== 'string' || !assignedUserId.trim()) {
+    const err = new Error('Responsable asignado (assigned_user_id) es obligatorio para pasar a seguimiento');
+    err.code = 'MISSING_ASSIGNED_USER';
+    throw err;
+  }
+  if (!actionType || !VALID_ACTION_TYPES.includes(actionType)) {
+    const err = new Error(`Tipo de acción inválido: '${actionType}'. Tipos válidos: ${VALID_ACTION_TYPES.join(', ')}`);
+    err.code = 'INVALID_ACTION_TYPE';
+    throw err;
+  }
+  if (!description || typeof description !== 'string' || !description.trim()) {
+    const err = new Error('Descripción de la acción es obligatoria para pasar a seguimiento');
+    err.code = 'MISSING_ACTION_DESCRIPTION';
+    throw err;
+  }
+  if (!dueDate) {
+    const err = new Error('Fecha límite (due_date) es obligatoria para pasar a seguimiento');
+    err.code = 'INVALID_DUE_DATE';
+    throw err;
+  }
+
+  // Parse and normalize due date to UTC ISO8601 string
+  const dueDateIso = parseDueDateToUtc(dueDate);
+
+  const user = db.prepare('SELECT id, name, email, role, is_active FROM users WHERE id = ?').get(assignedUserId.trim());
+  if (!user || user.is_active !== 1) {
+    const err = new Error('Usuario asignado no existe o no está activo');
+    err.code = 'USER_NOT_FOUND';
+    throw err;
+  }
+
+  const lead = db.prepare('SELECT id, status FROM leads WHERE id = ?').get(leadId);
+  if (!lead) {
+    const err = new Error('Lead no encontrado');
+    err.code = 'LEAD_NOT_FOUND';
+    throw err;
+  }
+
+  // Check if an open action (PENDING or OVERDUE) already exists for this lead
+  const existingOpen = db.prepare(`
+    SELECT id, status, action_type, due_date
+    FROM lead_actions
+    WHERE lead_id = ? AND status IN ('PENDING', 'OVERDUE')
+    LIMIT 1
+  `).get(leadId);
+
+  if (existingOpen) {
+    const err = new Error('El lead ya tiene una acción abierta (PENDING u OVERDUE). Debe completarse o cancelarse antes de asignar una nueva.');
+    err.code = 'ACTIVE_ACTION_EXISTS';
+    throw err;
+  }
+
+  const actionId = crypto.randomUUID();
+  const nowIso = now.toISOString();
+
+  // Determine initial status based on server clock:
+  const initialStatus = isActionOverdue(dueDateIso, now) ? 'OVERDUE' : 'PENDING';
+
+  runInTransaction(db, () => {
+    try {
+      db.prepare(`
+        INSERT INTO lead_actions (
+          id, lead_id, assigned_user_id, action_type, description,
+          due_date, status, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        actionId,
+        leadId,
+        user.id,
+        actionType,
+        description.trim(),
+        dueDateIso,
+        initialStatus,
+        nowIso,
+        nowIso
+      );
+    } catch (dbErr) {
+      if (dbErr.message && dbErr.message.includes('UNIQUE constraint failed')) {
+        const constraintErr = new Error('El lead ya tiene una acción abierta vigente en base de datos.');
+        constraintErr.code = 'ACTIVE_ACTION_EXISTS';
+        throw constraintErr;
+      }
+      throw dbErr;
+    }
+
+    // Notice: lead.status is NOT changed to ACTIONABLE (per TP-04 contract)
+
+    // Audit log
+    appendAuditLog({
+      leadId,
+      eventType: 'ACTION_ASSIGNED',
+      entityType: 'lead_actions',
+      entityId: actionId,
+      previousState: { lead_status: lead.status },
+      newState: {
+        lead_status: lead.status,
+        action_id: actionId,
+        assigned_user_id: user.id,
+        assigned_user_name: user.name,
+        action_type: actionType,
+        due_date: dueDateIso,
+        status: initialStatus
+      },
+      actorUserId: actorUserId || user.id
+    }, db);
+  });
+
+  const createdAction = db.prepare(`
+    SELECT a.*, u.name as assigned_user_name, u.email as assigned_user_email
+    FROM lead_actions a
+    JOIN users u ON u.id = a.assigned_user_id
+    WHERE a.id = ?
+  `).get(actionId);
+
+  return {
+    ...createdAction,
+    effective_status: computeEffectiveActionStatus(createdAction, now)
+  };
+}
+
+/**
+ * Completes an action with commercial result and optionally schedules next action.
+ * Rejects completion if already completed or cancelled.
+ */
+export function completeLeadAction({
+  leadId,
+  actionId,
+  resultSummary,
+  completedByUserId,
+  nextAction = null
+}, db = getDb(), now = new Date()) {
+  if (!leadId) throw new Error('leadId es requerido');
+  if (!actionId) throw new Error('actionId es requerido');
+  if (!resultSummary || typeof resultSummary !== 'string' || !resultSummary.trim()) {
+    const err = new Error('result_summary es obligatorio para completar una acción');
+    err.code = 'MISSING_RESULT_SUMMARY';
+    throw err;
+  }
+
+  const existing = db.prepare('SELECT * FROM lead_actions WHERE id = ? AND lead_id = ?').get(actionId, leadId);
+  if (!existing) {
+    const err = new Error('Acción no encontrada para este lead');
+    err.code = 'ACTION_NOT_FOUND';
+    throw err;
+  }
+  if (existing.status === 'COMPLETED') {
+    const err = new Error('La acción ya fue completada previamente');
+    err.code = 'ACTION_ALREADY_COMPLETED';
+    throw err;
+  }
+  if (existing.status === 'CANCELLED') {
+    const err = new Error('No se puede completar una acción cancelada');
+    err.code = 'ACTION_ALREADY_CANCELLED';
+    throw err;
+  }
+
+  const nowIso = now.toISOString();
+  let createdNextAction = null;
+
+  runInTransaction(db, () => {
+    db.prepare(`
+      UPDATE lead_actions
+      SET status = 'COMPLETED',
+          result_summary = ?,
+          completed_by_user_id = ?,
+          completed_at = ?,
+          updated_at = ?
+      WHERE id = ?
+    `).run(
+      resultSummary.trim(),
+      completedByUserId || null,
+      nowIso,
+      nowIso,
+      actionId
+    );
+
+    appendAuditLog({
+      leadId,
+      eventType: 'ACTION_COMPLETED',
+      entityType: 'lead_actions',
+      entityId: actionId,
+      previousState: { status: existing.status },
+      newState: {
+        status: 'COMPLETED',
+        result_summary: resultSummary.trim(),
+        completed_by_user_id: completedByUserId,
+        completed_at: nowIso
+      },
+      actorUserId: completedByUserId || 'system'
+    }, db);
+
+    if (nextAction && nextAction.actionType) {
+      createdNextAction = createLeadAction({
+        leadId,
+        assignedUserId: nextAction.assignedUserId || existing.assigned_user_id,
+        actionType: nextAction.actionType,
+        description: nextAction.description,
+        dueDate: nextAction.dueDate,
+        actorUserId: completedByUserId
+      }, db, now);
+    }
+  });
+
+  const completed = db.prepare(`
+    SELECT a.*, u.name as assigned_user_name, c.name as completed_by_user_name
+    FROM lead_actions a
+    LEFT JOIN users u ON u.id = a.assigned_user_id
+    LEFT JOIN users c ON c.id = a.completed_by_user_id
+    WHERE a.id = ?
+  `).get(actionId);
+
+  return {
+    completedAction: {
+      ...completed,
+      effective_status: 'COMPLETED'
+    },
+    nextAction: createdNextAction
+  };
+}
+
+/**
+ * Cancels an active action.
+ * Rejects cancellation if already completed or cancelled.
+ */
+export function cancelLeadAction({
+  leadId,
+  actionId,
+  actorUserId,
+  cancellationReason = null
+}, db = getDb(), now = new Date()) {
+  if (!leadId) throw new Error('leadId es requerido');
+  if (!actionId) throw new Error('actionId es requerido');
+
+  const existing = db.prepare('SELECT * FROM lead_actions WHERE id = ? AND lead_id = ?').get(actionId, leadId);
+  if (!existing) {
+    const err = new Error('Acción no encontrada para este lead');
+    err.code = 'ACTION_NOT_FOUND';
+    throw err;
+  }
+  if (existing.status === 'COMPLETED') {
+    const err = new Error('No se puede cancelar una acción ya completada');
+    err.code = 'CANNOT_CANCEL_COMPLETED_ACTION';
+    throw err;
+  }
+  if (existing.status === 'CANCELLED') {
+    const err = new Error('La acción ya fue cancelada previamente');
+    err.code = 'ACTION_ALREADY_CANCELLED';
+    throw err;
+  }
+
+  const nowIso = now.toISOString();
+
+  runInTransaction(db, () => {
+    db.prepare(`
+      UPDATE lead_actions
+      SET status = 'CANCELLED',
+          updated_at = ?
+      WHERE id = ?
+    `).run(nowIso, actionId);
+
+    appendAuditLog({
+      leadId,
+      eventType: 'ACTION_CANCELLED',
+      entityType: 'lead_actions',
+      entityId: actionId,
+      previousState: { status: existing.status },
+      newState: {
+        status: 'CANCELLED',
+        cancellation_reason: cancellationReason,
+        cancelled_at: nowIso
+      },
+      actorUserId: actorUserId || 'system'
+    }, db);
+  });
+
+  const cancelled = db.prepare(`
+    SELECT a.*, u.name as assigned_user_name
+    FROM lead_actions a
+    LEFT JOIN users u ON u.id = a.assigned_user_id
+    WHERE a.id = ?
+  `).get(actionId);
+
+  return {
+    ...cancelled,
+    effective_status: 'CANCELLED'
+  };
+}
+
+/**
+ * Archives a lead explicitly.
+ */
+export function archiveLead({ leadId, reason = null, actorUserId = 'system' }, db = getDb(), now = new Date()) {
+  const lead = getLeadById(leadId, db);
+  if (!lead) {
+    const err = new Error('Lead no encontrado');
+    err.code = 'LEAD_NOT_FOUND';
+    throw err;
+  }
+
+  const nowIso = now.toISOString();
+
+  runInTransaction(db, () => {
+    db.prepare(`
+      UPDATE leads
+      SET status = 'ARCHIVED', updated_at = ?
+      WHERE id = ?
+    `).run(nowIso, leadId);
+
+    appendAuditLog({
+      leadId,
+      eventType: 'LEAD_ARCHIVED',
+      entityType: 'leads',
+      entityId: leadId,
+      previousState: { status: lead.status },
+      newState: { status: 'ARCHIVED', reason, archived_at: nowIso },
+      actorUserId
+    }, db);
+  });
+
+  return getLeadById(leadId, db);
+}
+
+export function getActionsByLeadId(leadId, db = getDb(), now = new Date()) {
+  const actions = db.prepare(`
+    SELECT a.*,
+           u.name as assigned_user_name,
+           u.email as assigned_user_email,
+           c.name as completed_by_user_name
+    FROM lead_actions a
+    LEFT JOIN users u ON u.id = a.assigned_user_id
+    LEFT JOIN users c ON c.id = a.completed_by_user_id
+    WHERE a.lead_id = ?
+    ORDER BY a.created_at DESC
+  `).all(leadId);
+
+  return actions.map(act => ({
+    ...act,
+    effective_status: computeEffectiveActionStatus(act, now)
+  }));
+}
+
+export function getLatestActionByLeadId(leadId, db = getDb(), now = new Date()) {
+  const action = db.prepare(`
+    SELECT a.*,
+           u.name as assigned_user_name,
+           u.email as assigned_user_email,
+           c.name as completed_by_user_name
+    FROM lead_actions a
+    LEFT JOIN users u ON u.id = a.assigned_user_id
+    LEFT JOIN users c ON c.id = a.completed_by_user_id
+    WHERE a.lead_id = ?
+    ORDER BY a.created_at DESC
+    LIMIT 1
+  `).get(leadId);
+
+  if (!action) return null;
+  return {
+    ...action,
+    effective_status: computeEffectiveActionStatus(action, now)
+  };
+}

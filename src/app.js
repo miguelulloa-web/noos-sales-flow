@@ -39,8 +39,24 @@ import {
   validateDraftForCopy,
   markDraftCopied,
   listLeadsWithTriageSummary,
+  listActiveUsers,
+  createLeadAction,
+  completeLeadAction,
+  cancelLeadAction,
+  transitionOverdueActions,
+  archiveLead,
+  getActionsByLeadId,
+  getLatestActionByLeadId,
   getDb
 } from './db.js';
+import {
+  generateLeadsCsv,
+  generateLeadsJson
+} from './export_service.js';
+import {
+  parseDueDateToUtc,
+  isActionOverdue
+} from './time_service.js';
 import { 
   csrfOriginProtection, 
   sessionMiddleware, 
@@ -83,56 +99,61 @@ export function createApp(options = {}) {
 
   // Auth: Login
   app.post('/api/auth/login', async (req, res) => {
-    const { email, password } = req.body || {};
+    try {
+      const { email, password } = req.body || {};
 
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
+      if (!email || !password) {
+        return res.status(400).json({ error: 'Email and password are required' });
+      }
+
+      const user = getUserByEmail(email);
+      if (!user || !user.is_active) {
+        return res.status(401).json({ error: 'Invalid email or password' });
+      }
+
+      const isMatch = await verifyPassword(password, user.password_hash);
+      if (!isMatch) {
+        return res.status(401).json({ error: 'Invalid email or password' });
+      }
+
+      // Generate secure session token and compute hash
+      const rawToken = generateSessionToken();
+      const tokenHash = hashSessionToken(rawToken);
+
+      // Persist session hash
+      const session = createSession({
+        userId: user.id,
+        sessionTokenHash: tokenHash,
+        durationHours: 24
+      });
+
+      // Append audit log for login
+      appendAuditLog({
+        eventType: 'USER_LOGIN',
+        entityType: 'USER',
+        entityId: user.id,
+        actorUserId: user.id,
+        newState: { email: user.email, role: user.role }
+      });
+
+      // Set HttpOnly cookie
+      const cookieOptions = getSessionCookieOptions(req);
+      res.cookie(SESSION_COOKIE_NAME, rawToken, cookieOptions);
+
+      return res.json({
+        message: 'Login successful',
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role
+        },
+        expiresAt: session.expiresAt
+      });
+    } catch (err) {
+      console.error('Login error:', err);
+      return res.status(500).json({ error: err.message, stack: err.stack });
     }
-
-    const user = getUserByEmail(email);
-    if (!user || !user.is_active) {
-      return res.status(401).json({ error: 'Invalid email or password' });
-    }
-
-    const isMatch = await verifyPassword(password, user.password_hash);
-    if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid email or password' });
-    }
-
-    // Generate secure session token and compute hash
-    const rawToken = generateSessionToken();
-    const tokenHash = hashSessionToken(rawToken);
-
-    // Persist session hash
-    const session = createSession({
-      userId: user.id,
-      sessionTokenHash: tokenHash,
-      durationHours: 24
-    });
-
-    // Append audit log for login
-    appendAuditLog({
-      eventType: 'USER_LOGIN',
-      entityType: 'USER',
-      entityId: user.id,
-      actorUserId: user.id,
-      newState: { email: user.email, role: user.role }
-    });
-
-    // Set HttpOnly cookie
-    const cookieOptions = getSessionCookieOptions(req);
-    res.cookie(SESSION_COOKIE_NAME, rawToken, cookieOptions);
-
-    return res.json({
-      message: 'Login successful',
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role
-      },
-      expiresAt: session.expiresAt
-    });
   });
 
   // Auth: Logout
@@ -317,7 +338,7 @@ export function createApp(options = {}) {
       textHash,
       rawText: raw_text,
       source,
-      status: 'CAPTURED',
+      status: 'PENDING_TRIAGE',
       isPossibleDuplicate,
       duplicateOfLeadId,
       senderName: sender_name || null,
@@ -334,7 +355,7 @@ export function createApp(options = {}) {
       actorUserId: req.user.id,
       newState: {
         idempotency_key: key,
-        status: 'CAPTURED',
+        status: 'PENDING_TRIAGE',
         is_possible_duplicate: isPossibleDuplicate,
         duplicate_of_lead_id: duplicateOfLeadId
       }
@@ -391,7 +412,7 @@ export function createApp(options = {}) {
         }
 
         // Update lead fields if extracted and not provided
-        const updates = { status: 'ANALYZED' };
+        const updates = { status: 'IN_REVIEW' };
         if (!lead.company_name && sanitized.companyName) {
           updates.company_name = sanitized.companyName;
         }
@@ -411,7 +432,7 @@ export function createApp(options = {}) {
           entityId: lead.id,
           actorUserId: req.user.id,
           newState: {
-            status: 'ANALYZED',
+            status: 'IN_REVIEW',
             extraction_id: extractionRecord.id,
             is_commercial: sanitized.isCommercial,
             confidence_score: sanitized.confidenceScore
@@ -444,7 +465,7 @@ export function createApp(options = {}) {
           newState: {
             error_code: err.code || 'FAILED',
             error_message: err.message,
-            status: 'CAPTURED'
+            status: 'PENDING_TRIAGE'
           }
         });
       }
@@ -459,18 +480,60 @@ export function createApp(options = {}) {
     });
   });
 
-  // Leads: Master List for Triage
+  // Leads: Master List for Triage with Filter tabs (Todas, Pendientes, Vencidas, Posibles Duplicados)
   app.get('/api/leads', requireAuth, (req, res) => {
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
     const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
     const status = req.query.status || null;
+    const filter = req.query.filter || null;
     const search = req.query.search || null;
 
-    const leads = listLeadsWithTriageSummary({ limit, offset, status, search });
+    const leads = listLeadsWithTriageSummary({ limit, offset, status, filter, search });
     return res.json({ leads });
   });
 
-  // Leads: Get Lead by ID with Extraction, Evidence, Confirmed Facts, and Drafts
+  // Exports: Safe CSV export with formula injection mitigation (CWE-1236)
+  app.get('/api/leads/export/csv', requireAuth, (req, res) => {
+    const leads = listLeadsWithTriageSummary({ limit: 2000, offset: 0 });
+    const fullLeads = leads.map(l => ({
+      lead: l,
+      current_confirmed_facts: getCurrentConfirmedFactsByLeadId(l.id),
+      current_draft: getLatestDraftByLeadId(l.id),
+      latest_action: getLatestActionByLeadId(l.id)
+    }));
+    const csvContent = generateLeadsCsv(fullLeads);
+    const dateStr = new Date().toISOString().split('T')[0];
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="leads_export_${dateStr}.csv"`);
+    return res.status(200).send(csvContent);
+  });
+
+  // Exports: Structured JSON export
+  app.get('/api/leads/export/json', requireAuth, (req, res) => {
+    const leads = listLeadsWithTriageSummary({ limit: 2000, offset: 0 });
+    const fullLeads = leads.map(l => ({
+      lead: l,
+      current_confirmed_facts: getCurrentConfirmedFactsByLeadId(l.id),
+      confirmed_facts_history: getConfirmedFactsHistoryByLeadId(l.id),
+      current_draft: getLatestDraftByLeadId(l.id),
+      drafts_history: getDraftsHistoryByLeadId(l.id),
+      actions: getActionsByLeadId(l.id),
+      latest_action: getLatestActionByLeadId(l.id)
+    }));
+    const jsonContent = generateLeadsJson(fullLeads);
+    const dateStr = new Date().toISOString().split('T')[0];
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="leads_export_${dateStr}.json"`);
+    return res.status(200).json(jsonContent);
+  });
+
+  // Operators: List active users for commercial assignment dropdown
+  app.get('/api/operators', requireAuth, (req, res) => {
+    const operators = listActiveUsers();
+    return res.json({ operators });
+  });
+
+  // Leads: Get Lead by ID with Extraction, Evidence, Confirmed Facts, Drafts, and Actions
   app.get('/api/leads/:id', requireAuth, (req, res) => {
     const lead = getLeadById(req.params.id);
     if (!lead) {
@@ -483,6 +546,8 @@ export function createApp(options = {}) {
     const confirmedFactsHistory = getConfirmedFactsHistoryByLeadId(lead.id);
     const currentDraft = getLatestDraftByLeadId(lead.id);
     const draftsHistory = getDraftsHistoryByLeadId(lead.id);
+    const actions = getActionsByLeadId(lead.id);
+    const latestAction = getLatestActionByLeadId(lead.id);
 
     return res.json({
       lead,
@@ -491,8 +556,130 @@ export function createApp(options = {}) {
       current_confirmed_facts: currentConfirmedFacts,
       confirmed_facts_history: confirmedFactsHistory,
       current_draft: currentDraft,
-      drafts_history: draftsHistory
+      drafts_history: draftsHistory,
+      actions,
+      latest_action: latestAction
     });
+  });
+
+  // Actions: Assign commercial action to lead
+  app.post('/api/leads/:id/actions', requireAuth, (req, res) => {
+    const leadId = req.params.id;
+    const { assigned_user_id, action_type, description, due_date } = req.body || {};
+
+    try {
+      const action = createLeadAction({
+        leadId,
+        assignedUserId: assigned_user_id,
+        actionType: action_type,
+        description,
+        dueDate: due_date,
+        actorUserId: req.user.id
+      });
+      return res.status(201).json({ status: 'ok', action });
+    } catch (err) {
+      if (err.code === 'ACTIVE_ACTION_EXISTS') {
+        return res.status(409).json({ error: err.message, code: err.code });
+      }
+      if (err.code === 'USER_NOT_FOUND' || err.code === 'LEAD_NOT_FOUND') {
+        return res.status(404).json({ error: err.message, code: err.code });
+      }
+      if (['MISSING_ASSIGNED_USER', 'INVALID_ACTION_TYPE', 'MISSING_ACTION_DESCRIPTION', 'INVALID_DUE_DATE'].includes(err.code)) {
+        return res.status(400).json({ error: err.message, code: err.code });
+      }
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Actions: Complete commercial action with result and optional next action
+  app.post('/api/leads/:id/actions/:actionId/complete', requireAuth, (req, res) => {
+    const leadId = req.params.id;
+    const { actionId } = req.params;
+    const { result_summary, next_action } = req.body || {};
+
+    try {
+      const result = completeLeadAction({
+        leadId,
+        actionId,
+        resultSummary: result_summary,
+        completedByUserId: req.user.id,
+        nextAction: next_action ? {
+          assignedUserId: next_action.assigned_user_id,
+          actionType: next_action.action_type,
+          description: next_action.description,
+          dueDate: next_action.due_date
+        } : null
+      });
+      return res.json({ status: 'ok', ...result });
+    } catch (err) {
+      if (err.code === 'ACTION_NOT_FOUND') {
+        return res.status(404).json({ error: err.message, code: err.code });
+      }
+      if (['ACTION_ALREADY_COMPLETED', 'ACTION_ALREADY_CANCELLED'].includes(err.code)) {
+        return res.status(409).json({ error: err.message, code: err.code });
+      }
+      if (err.code === 'MISSING_RESULT_SUMMARY') {
+        return res.status(400).json({ error: err.message, code: err.code });
+      }
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Actions: Cancel commercial action
+  app.post('/api/leads/:id/actions/:actionId/cancel', requireAuth, (req, res) => {
+    const leadId = req.params.id;
+    const { actionId } = req.params;
+    const { cancellation_reason } = req.body || {};
+
+    try {
+      const action = cancelLeadAction({
+        leadId,
+        actionId,
+        actorUserId: req.user.id,
+        cancellationReason: cancellation_reason
+      });
+      return res.json({ status: 'ok', action });
+    } catch (err) {
+      if (err.code === 'ACTION_NOT_FOUND') {
+        return res.status(404).json({ error: err.message, code: err.code });
+      }
+      if (['CANNOT_CANCEL_COMPLETED_ACTION', 'ACTION_ALREADY_CANCELLED'].includes(err.code)) {
+        return res.status(409).json({ error: err.message, code: err.code });
+      }
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Actions: Get actions history for lead
+  app.get('/api/leads/:id/actions', requireAuth, (req, res) => {
+    const leadId = req.params.id;
+    const lead = getLeadById(leadId);
+    if (!lead) {
+      return res.status(404).json({ error: 'Lead no encontrado' });
+    }
+    const actions = getActionsByLeadId(leadId);
+    return res.json({ actions });
+  });
+
+  // Actions: Overdue transition batch/cron job
+  app.post('/api/leads/overdue/transition', requireAuth, (req, res) => {
+    const result = transitionOverdueActions(getDb(), new Date(), req.user.id);
+    return res.json({ status: 'ok', ...result });
+  });
+
+  // Leads: Explicit archive endpoint
+  app.post('/api/leads/:id/archive', requireAuth, (req, res) => {
+    const leadId = req.params.id;
+    const { reason } = req.body || {};
+    try {
+      const lead = archiveLead({ leadId, reason, actorUserId: req.user.id });
+      return res.json({ status: 'ok', lead });
+    } catch (err) {
+      if (err.code === 'LEAD_NOT_FOUND') {
+        return res.status(404).json({ error: err.message, code: err.code });
+      }
+      return res.status(500).json({ error: err.message });
+    }
   });
 
   // Confirmed Facts: Save and version confirmed facts (atomically invalidates older drafts to STALE)
@@ -748,7 +935,7 @@ export function createApp(options = {}) {
   // Generic error handler
   app.use((err, req, res, next) => {
     console.error('Unhandled server error:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Internal server error', message: err.message, stack: err.stack });
   });
 
   return app;

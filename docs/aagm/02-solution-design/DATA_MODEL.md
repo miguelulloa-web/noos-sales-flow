@@ -46,12 +46,22 @@ Controla la autenticación con cookies seguras y expiración.
 | `idempotency_key` | TEXT | NO | Clave única de idempotencia del cliente o hash de entrada (UNIQUE) |
 | `raw_text` | TEXT | NO | Texto original íntegro e inmutable ingresado por el usuario |
 | `source_channel` | TEXT | NO | Canal: `WEB_FORM`, `PASTE_TEXT`, `SYNTHETIC_SAMPLE` |
-| `status` | TEXT | NO | `PENDING_TRIAGE`, `IN_REVIEW`, `CONFIRMED`, `RESPONDED`, `OVERDUE`, `ARCHIVED` |
+| `status` | TEXT | NO | `PENDING_TRIAGE`, `IN_REVIEW`, `CONFIRMED`, `RESPONDED`, `ARCHIVED` |
 | `current_assigned_user_id` | TEXT | SÍ | FK hacia `users.id` |
 | `is_possible_duplicate` | INTEGER | NO | 1 si el sistema detectó similitud o duplicado potencial; 0 por defecto |
 | `duplicate_of_lead_id` | TEXT (UUID) | SÍ | FK hacia `leads.id` si está enlazado a un duplicado previo |
 | `created_at` | TEXT (ISO8601) | NO | Marca de tiempo UTC |
 | `updated_at` | TEXT (ISO8601) | NO | Marca de tiempo UTC |
+
+*Lógica de Estados del Lead y Migración (TP-04):*
+Los estados de `leads.status` están estrictamente desacoplados de `lead_actions.status`. Se unifican mediante la siguiente migración:
+- `CAPTURED` → `PENDING_TRIAGE` (Nueva solicitud recibida pendiente de revisión).
+- `ANALYZED` → `IN_REVIEW` (Extracción con IA completada o en proceso de revisión).
+- `TRIAGED` / `ACTIONABLE` → `CONFIRMED` (Hechos validados por el operador humano).
+- `RESPONDED` (Borrador comercial verificado y copiado al portapapeles).
+- `DISCARDED` → `ARCHIVED` (Solicitud archivada o descartada explícitamente).
+
+*Regla crítica:* `OVERDUE` pertenece exclusivamente a `lead_actions.status`, nunca a `leads.status`. La asignación de una acción comercial no utiliza un estado `ACTIONABLE` en el lead, preservando la separación rigurosa entre estado de la entidad lead y estado de la acción.
 
 *Lógica de Idempotencia y Duplicados:*
 1. **Reintento exacto:** Si se recibe un request con un `idempotency_key` ya existente en `leads`, el backend responde HTTP 200 con el registro previamente almacenado y el header `X-Idempotent-Replay: true`, sin re-ejecutar llamadas al modelo de IA ni duplicar datos.
@@ -126,6 +136,27 @@ Controla la autenticación con cookies seguras y expiración.
 | `completed_by_user_id` | TEXT | SÍ | FK hacia `users.id` |
 | `completed_at` | TEXT (ISO8601) | SÍ | Fecha y hora de compleción |
 | `created_at` | TEXT (ISO8601) | NO | Fecha de creación |
+| `updated_at` | TEXT (ISO8601) | NO | Fecha de última actualización |
+
+*Reglas de Negocio e Integridad en Base de Datos (TP-04):*
+1. **Acción Abierta Única a Nivel de Base de Datos:** Se garantiza mediante un índice parcial único en SQLite:
+   ```sql
+   CREATE UNIQUE INDEX IF NOT EXISTS idx_lead_actions_unique_open ON lead_actions(lead_id) WHERE status IN ('PENDING', 'OVERDUE');
+   ```
+   Ningún lead puede tener más de una acción abierta (`PENDING` u `OVERDUE`) simultáneamente.
+2. **Historial Íntegro:** Al completar (`COMPLETED`) o cancelar (`CANCELLED`) una acción, el registro se conserva como historial permanente y auditable antes de permitir una nueva acción para el lead.
+3. **Inmutabilidad de Acciones Terminadas:** No se permite completar una acción ya `CANCELLED` ni volver a completar una acción `COMPLETED`. No se permite cancelar una acción `COMPLETED` ni re-cancelar una `CANCELLED`.
+4. **Contrato de Zona Horaria y Fechas:**
+   - La zona se configura en `SYSTEM_TIMEZONE`, validada contra `Intl` (por defecto `America/Santiago`).
+   - Las fechas límite se almacenan normalizadas en UTC ISO8601 (`YYYY-MM-DDTHH:mm:ss.sssZ`).
+   - Las fechas ambiguas sin offset se convierten explícitamente desde la zona configurada.
+   - El cálculo de vencimiento (`isActionOverdue`) se realiza exclusivamente con el reloj del servidor (`serverNow > dueDate`), nunca con el reloj del cliente/navegador.
+5. **Transición a OVERDUE Transaccional e Idempotente:**
+   - Se ejecuta mediante `transitionOverdueActions` de forma transaccional (`runInTransaction`).
+   - Afecta estrictamente a acciones en estado `PENDING` cuya fecha límite sea inferior a `serverNow`.
+   - Registra cada transición en `audit_log` con evento `ACTION_MARKED_OVERDUE`.
+   - Es idempotente y no genera registros duplicados en re-ejecuciones.
+   - La consulta de bandeja no ejecuta mutaciones masivas opacas en base de datos.
 
 ---
 

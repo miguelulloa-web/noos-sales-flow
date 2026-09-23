@@ -1,0 +1,267 @@
+[
+  {
+    "lead": {
+      "id": "dc369c0e-f550-41d7-8643-53c8f7bac943",
+      "idempotency_key": "lead-sm-1e9e9610",
+      "status": "RESPONDED",
+      "source": "MANUAL",
+      "is_possible_duplicate": false,
+      "duplicate_of_lead_id": null,
+      "sender_name": "Esteban Silva",
+      "sender_email": "esilva@maritimosvalpo.cl",
+      "company_name": "Servicios Marítimos Valparaíso",
+      "raw_text": "Servicios Marítimos solicita demo de software de trazabilidad portuaria.",
+      "created_at": "2026-09-23T02:15:20.740Z",
+      "updated_at": "2026-09-23T02:15:20.740Z"
+    },
+    "confirmed_facts": null,
+    "confirmed_facts_history": [],
+    "current_draft": null,
+    "drafts_history": [],
+    "actions": [
+      {
+        "id": "a6e17770-b002-4178-8f46-ddd0c38280e1",
+        "lead_id": "dc369c0e-f550-41d7-8643-53c8f7bac943",
+        "assigned_user_id": "7d9e4f52-7535-4e76-b8af-a9522ee6484b",
+        "action_type": "SCHEDULE_DEMO",
+        "description": "Coordinar demostración en línea de plataforma de trazabilidad",
+        "due_date": "2026-09-20T02:15:20.688Z",
+        "status": "COMPLETED",
+        "result_summary": "Demostración realizada con éxito. Cliente evaluará propuesta en comité.",
+        "completed_by_user_id": "7d9e4f52-7535-4e76-b8af-a9522ee6484b",
+        "completed_at": "2026-09-23T02:15:20.742Z",
+        "created_at": "2026-09-23T02:15:20.741Z",
+        "updated_at": "2026-09-23T02:15:20.742Z",
+        "assigned_user_name": "Operador Comercial TP-04",
+        "assigned_user_email": "operador-tp04-1e9e9610@noosadvisory.com",
+        "completed_by_user_name": "Operador Comercial TP-04",
+        "effective_status": "COMPLETED"
+      }
+    ]
+  },
+  {
+    "lead": {
+      "id": "3cfbf8f9-53ed-4214-af09-3d478cbdac36",
+      "idempotency_key": "lead-dup-1e9e9610",
+      "status": "IN_REVIEW",
+      "source": "MANUAL",
+      "is_possible_duplicate": true,
+      "duplicate_of_lead_id": "77755163-2cd9-49bf-898b-600718de708e",
+      "sender_name": "Carlos Mendoza",
+      "sender_email": "cmendoza@minerasancristobal.cl",
+      "company_name": "Minera San Cristóbal S.A.",
+      "raw_text": "Duplicado: Requerimos cotización formal para optimización de inventarios en faena minera.",
+      "created_at": "2026-09-23T02:15:20.739Z",
+      "updated_at": "2026-09-23T02:15:20.739Z"
+    },
+    "confirmed_facts": null,
+    "confirmed_facts_history": [],
+    "current_draft": null,
+    "drafts_history": [],
+    "actions": []
+  },
+  {
+    "lead": {
+      "id": "a08cfeeb-4283-492d-97c6-ef2ded8af62c",
+      "idempotency_key": "lead-fc-1e9e9610",
+      "status": "PENDING_TRIAGE",
+      "source": "MANUAL",
+      "is_possible_duplicate": false,
+      "duplicate_of_lead_id": null,
+      "sender_name": "Rodrigo Gómez",
+      "sender_email": "rgomez@financieracentral.cl",
+      "company_name": "Financiera Central",
+      "raw_text": "Buenos días, quisiéramos conocer más sobre sus servicios de consultoría estratégica financiera.",
+      "created_at": "2026-09-23T02:15:20.738Z",
+      "updated_at": "2026-09-23T02:15:20.738Z"
+    },
+    "confirmed_facts": null,
+    "confirmed_facts_history": [],
+    "current_draft": null,
+    "drafts_history": [],
+    "actions": [
+      {
+        "id": "3ef6ec7d-a751-4eb4-b0fb-fc3e62d92991",
+        "lead_id": "a08cfeeb-4283-492d-97c6-ef2ded8af62c",
+        "assigned_user_id": "7d9e4f52-7535-4e76-b8af-a9522ee6484b",
+        "action_type": "SCHEDULE_DEMO",
+        "description": "Agendar demostración ejecutiva con el comité de inversiones",
+        "due_date": "2026-09-23T21:00:59.000Z",
+        "status": "PENDING",
+        "result_summary": null,
+        "completed_by_user_id": null,
+        "completed_at": null,
+        "created_at": "2026-09-23T02:15:26.809Z",
+        "updated_at": "2026-09-23T02:15:26.809Z",
+        "assigned_user_name": "Operador Comercial TP-04",
+        "assigned_user_email": "operador-tp04-1e9e9610@noosadvisory.com",
+        "completed_by_user_name": null,
+        "effective_status": "PENDING"
+      }
+    ]
+  },
+  {
+    "lead": {
+      "id": "b782b6c4-66e5-4bb1-b871-947329c78ad9",
+      "idempotency_key": "lead-ag-1e9e9610",
+      "status": "CONFIRMED",
+      "source": "MANUAL",
+      "is_possible_duplicate": false,
+      "duplicate_of_lead_id": null,
+      "sender_name": "Patricia Morales",
+      "sender_email": "pmorales@agricoladelvalle.cl",
+      "company_name": "Agrícola del Valle Ltda.",
+      "raw_text": "Hola Noos, nos urge contactar un especialista comercial para evaluación de procesos en Agrícola del Valle.",
+      "created_at": "2026-09-23T02:15:20.735Z",
+      "updated_at": "2026-09-23T02:15:20.736Z"
+    },
+    "confirmed_facts": {
+      "id": "557d925d-01d8-4902-8277-ab7bd85ff76d",
+      "lead_id": "b782b6c4-66e5-4bb1-b871-947329c78ad9",
+      "version": 1,
+      "contact_name": "Patricia Morales",
+      "company_name": "Agrícola del Valle Ltda.",
+      "contact_email": "pmorales@agricoladelvalle.cl",
+      "contact_phone": null,
+      "request_type": "INQUIRY",
+      "scope_summary": "Evaluación urgente de procesos operativos agrícolas.",
+      "urgency": "HIGH",
+      "confirmed_by_user_id": "7d9e4f52-7535-4e76-b8af-a9522ee6484b",
+      "confirmed_at": "2026-09-23T02:15:20.736Z",
+      "is_current": 1,
+      "confirmed_by_user_name": "Operador Comercial TP-04",
+      "confirmed_by_user_email": "operador-tp04-1e9e9610@noosadvisory.com"
+    },
+    "confirmed_facts_history": [
+      {
+        "id": "557d925d-01d8-4902-8277-ab7bd85ff76d",
+        "lead_id": "b782b6c4-66e5-4bb1-b871-947329c78ad9",
+        "version": 1,
+        "contact_name": "Patricia Morales",
+        "company_name": "Agrícola del Valle Ltda.",
+        "contact_email": "pmorales@agricoladelvalle.cl",
+        "contact_phone": null,
+        "request_type": "INQUIRY",
+        "scope_summary": "Evaluación urgente de procesos operativos agrícolas.",
+        "urgency": "HIGH",
+        "confirmed_by_user_id": "7d9e4f52-7535-4e76-b8af-a9522ee6484b",
+        "confirmed_at": "2026-09-23T02:15:20.736Z",
+        "is_current": 1,
+        "confirmed_by_user_name": "Operador Comercial TP-04"
+      }
+    ],
+    "current_draft": null,
+    "drafts_history": [],
+    "actions": [
+      {
+        "id": "b3a15fb2-026c-471f-8f66-49632c84b730",
+        "lead_id": "b782b6c4-66e5-4bb1-b871-947329c78ad9",
+        "assigned_user_id": "7d9e4f52-7535-4e76-b8af-a9522ee6484b",
+        "action_type": "SEND_QUOTE",
+        "description": "Enviar propuesta y cotización formal de optimización de procesos",
+        "due_date": "2026-09-23T21:00:59.000Z",
+        "status": "PENDING",
+        "result_summary": null,
+        "completed_by_user_id": null,
+        "completed_at": null,
+        "created_at": "2026-09-23T02:15:28.198Z",
+        "updated_at": "2026-09-23T02:15:28.198Z",
+        "assigned_user_name": "Operador Comercial TP-04",
+        "assigned_user_email": "operador-tp04-1e9e9610@noosadvisory.com",
+        "completed_by_user_name": null,
+        "effective_status": "PENDING"
+      },
+      {
+        "id": "a7866520-12f3-4974-8f4d-9eb697aedde7",
+        "lead_id": "b782b6c4-66e5-4bb1-b871-947329c78ad9",
+        "assigned_user_id": "7d9e4f52-7535-4e76-b8af-a9522ee6484b",
+        "action_type": "CALL_PROSPECT",
+        "description": "Llamar a Patricia Morales para coordinar reunión de diagnóstico",
+        "due_date": "2026-09-22T02:15:20.688Z",
+        "status": "COMPLETED",
+        "result_summary": "Llamada comercial exitosa con Patricia Morales. Se alineó alcance técnico preliminar.",
+        "completed_by_user_id": "7d9e4f52-7535-4e76-b8af-a9522ee6484b",
+        "completed_at": "2026-09-23T02:15:28.198Z",
+        "created_at": "2026-09-23T02:15:20.737Z",
+        "updated_at": "2026-09-23T02:15:28.198Z",
+        "assigned_user_name": "Operador Comercial TP-04",
+        "assigned_user_email": "operador-tp04-1e9e9610@noosadvisory.com",
+        "completed_by_user_name": "Operador Comercial TP-04",
+        "effective_status": "COMPLETED"
+      }
+    ]
+  },
+  {
+    "lead": {
+      "id": "77755163-2cd9-49bf-898b-600718de708e",
+      "idempotency_key": "lead-sc-1e9e9610",
+      "status": "CONFIRMED",
+      "source": "MANUAL",
+      "is_possible_duplicate": false,
+      "duplicate_of_lead_id": null,
+      "sender_name": "Carlos Mendoza",
+      "sender_email": "cmendoza@minerasancristobal.cl",
+      "company_name": "Minera San Cristóbal S.A.",
+      "raw_text": "Estimados, somos Minera San Cristóbal. Requerimos cotización formal para optimización de inventarios. Urgencia media.",
+      "created_at": "2026-09-23T02:15:20.689Z",
+      "updated_at": "2026-09-23T02:15:20.690Z"
+    },
+    "confirmed_facts": {
+      "id": "4a50db05-367f-42d2-b0c3-459c42ba4c1c",
+      "lead_id": "77755163-2cd9-49bf-898b-600718de708e",
+      "version": 1,
+      "contact_name": "Carlos Mendoza",
+      "company_name": "Minera San Cristóbal S.A.",
+      "contact_email": "cmendoza@minerasancristobal.cl",
+      "contact_phone": null,
+      "request_type": "QUOTE",
+      "scope_summary": "Optimización de inventarios y logística pesada en faena norte.",
+      "urgency": "MEDIUM",
+      "confirmed_by_user_id": "7d9e4f52-7535-4e76-b8af-a9522ee6484b",
+      "confirmed_at": "2026-09-23T02:15:20.690Z",
+      "is_current": 1,
+      "confirmed_by_user_name": "Operador Comercial TP-04",
+      "confirmed_by_user_email": "operador-tp04-1e9e9610@noosadvisory.com"
+    },
+    "confirmed_facts_history": [
+      {
+        "id": "4a50db05-367f-42d2-b0c3-459c42ba4c1c",
+        "lead_id": "77755163-2cd9-49bf-898b-600718de708e",
+        "version": 1,
+        "contact_name": "Carlos Mendoza",
+        "company_name": "Minera San Cristóbal S.A.",
+        "contact_email": "cmendoza@minerasancristobal.cl",
+        "contact_phone": null,
+        "request_type": "QUOTE",
+        "scope_summary": "Optimización de inventarios y logística pesada en faena norte.",
+        "urgency": "MEDIUM",
+        "confirmed_by_user_id": "7d9e4f52-7535-4e76-b8af-a9522ee6484b",
+        "confirmed_at": "2026-09-23T02:15:20.690Z",
+        "is_current": 1,
+        "confirmed_by_user_name": "Operador Comercial TP-04"
+      }
+    ],
+    "current_draft": null,
+    "drafts_history": [],
+    "actions": [
+      {
+        "id": "994d3a19-b829-4901-ac65-fcf48896f4f8",
+        "lead_id": "77755163-2cd9-49bf-898b-600718de708e",
+        "assigned_user_id": "7d9e4f52-7535-4e76-b8af-a9522ee6484b",
+        "action_type": "SEND_QUOTE",
+        "description": "Preparar propuesta técnica de optimización y enviar cotización formal",
+        "due_date": "2026-09-25T02:15:20.688Z",
+        "status": "PENDING",
+        "result_summary": null,
+        "completed_by_user_id": null,
+        "completed_at": null,
+        "created_at": "2026-09-23T02:15:20.691Z",
+        "updated_at": "2026-09-23T02:15:20.691Z",
+        "assigned_user_name": "Operador Comercial TP-04",
+        "assigned_user_email": "operador-tp04-1e9e9610@noosadvisory.com",
+        "completed_by_user_name": null,
+        "effective_status": "PENDING"
+      }
+    ]
+  }
+]

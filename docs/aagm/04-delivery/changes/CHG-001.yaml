@@ -18,7 +18,7 @@ task_packets:
   - TP-01 (DONE)
   - TP-02 (DONE)
   - TP-03 (DONE)
-  - TP-04 (IMPLEMENTING)
+  - TP-04 (PENDING_VALIDATION)
   - TP-05 (DRAFT)
 commits_or_prs:
   - "8f214f5 (feat: implement TP-01 local foundation, persistence, auth and audit log)"
@@ -40,8 +40,9 @@ evidence:
   - "docs/aagm/04-delivery/evidence/EV-TP-01.md"
   - "docs/aagm/04-delivery/evidence/EV-TP-02.md"
   - "docs/aagm/04-delivery/evidence/EV-TP-03.md"
+  - "docs/aagm/04-delivery/evidence/EV-TP-04.md"
 qa_ref: null
 release: null
 environment: DEV
 production_validation_ref: null
-next_action: "Presentar cierre de TP-03 al Sponsor y solicitar autorización formal para TP-04 (Seguimiento, Vencimientos y Exportación)"
+next_action: "Presentar evidencia de entrega EV-TP-04 al Sponsor para revisión y decisión formal de cierre"
