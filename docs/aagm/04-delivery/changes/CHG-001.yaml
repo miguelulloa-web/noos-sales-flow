@@ -3,8 +3,8 @@ requirement: "MVP de Captura y Seguimiento Comercial con IA para NoosAdvisory ba
 modality: MUST
 type: MODIFICATION
 priority: HIGH
-status: VALIDATING
-current_stage: VALIDATING
+status: READY_FOR_RELEASE
+current_stage: READY_FOR_RELEASE
 owner: ORCHESTRATOR_PM
 decision_refs:
   - "Ruta A aprobada por Sponsor (2026-09-14)"
@@ -19,7 +19,8 @@ task_packets:
   - TP-02 (DONE)
   - TP-03 (DONE)
   - TP-04 (DONE)
-  - TP-05 (PENDING_VALIDATION)
+  - TP-05 (DONE)
+
 commits_or_prs:
   - "8f214f5 (feat: implement TP-01 local foundation, persistence, auth and audit log)"
   - "779a048 (fix(auth-db): enforce db triggers, exact origin matching, secure bootstrap and real blackbox tests)"
@@ -47,9 +48,9 @@ evidence:
   - "docs/aagm/04-delivery/evidence/EV-TP-03.md"
   - "docs/aagm/04-delivery/evidence/EV-TP-04.md"
   - "docs/aagm/04-delivery/evidence/EV-TP-05.md"
-qa_ref: null
+qa_ref: "docs/aagm/04-delivery/qa/QA-TP-05.md"
 release: null
 release_gate: NOT_EVALUATED
 environment: DEV
 production_validation_ref: null
-next_action: "Revisión formal del Sponsor y validación de QA independiente sobre el candidato de entrega de TP-05 y evaluación del Release Gate de CHG-001"
+next_action: "Evaluación formal del Release Gate de CHG-001 por el ORCHESTRATOR_PM tras autorización del Sponsor (/aagm-release-gate)"

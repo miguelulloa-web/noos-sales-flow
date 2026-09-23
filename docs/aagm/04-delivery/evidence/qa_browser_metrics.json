@@ -1,0 +1,19 @@
+{
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+    "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+  ],
+  "pageErrors": [],
+  "notFound404": [],
+  "mobileDimensions": {
+    "scrollWidth": 390,
+    "clientWidth": 390,
+    "bodyScrollWidth": 390,
+    "bodyClientWidth": 390,
+    "windowInnerWidth": 390,
+    "hasDocumentOverflow": false
+  },
+  "desktopTitle": "NoosAdvisory · Triage Comercial y Borradores Supervisados",
+  "leadsPreserved": true,
+  "demoScriptSimulatedSeconds": 0
+}

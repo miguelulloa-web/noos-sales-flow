@@ -23,9 +23,10 @@ transition:
     - "docs/aagm/04-delivery/evidence/EV-TP-03.md"
     - "docs/aagm/04-delivery/evidence/EV-TP-04.md"
     - "docs/aagm/04-delivery/evidence/EV-TP-05.md"
-  recorded_at: "2026-09-23T12:55:00-03:00"
+    - "docs/aagm/04-delivery/qa/QA-TP-05.md"
+  recorded_at: "2026-09-23T20:30:00-03:00"
 readiness:
-  delivery: READY_FOR_QA
+  delivery: READY_FOR_RELEASE
   release: NOT_READY
 integrations:
   - name: "Google Gemini API (gemini-3.6-flash)"
@@ -41,14 +42,14 @@ integrations:
     state: DEFERRED
 changes:
   - id: CHG-001
-    status: VALIDATING
+    status: READY_FOR_RELEASE
     owner: ORCHESTRATOR_PM
 environments:
   - logical_name: DEV
     physical_target: "http://localhost:3000"
-    version: "v0.5.0-dev (TP-05 PENDING_VALIDATION)"
+    version: "v0.5.0-dev (TP-05 DONE, READY_FOR_RELEASE)"
     protection: UNPROTECTED
-    validation: "PASS (52/53 pruebas automatizadas PASS [1 skipped sandbox socket], 18 escenarios pre-ejecutados PASS, sesión en navegador desktop/mobile PASS, persistencia post-reinicio PASS)"
+    validation: "PASS (56/56 pruebas automatizadas PASS, 0 skipped, 18 escenarios PASS, sesión en Google Chrome desktop/mobile 390x844 PASS [0 overflow, 0 pageerror, 0 404s], QA-TP-05 PASS)"
   - logical_name: STAGE_GCP
     physical_target: "Google Cloud Run"
     version: null
@@ -56,19 +57,19 @@ environments:
     validation: "DEFERRED"
 quality:
   empirical_validation: PASS
-  qa: PENDING_VALIDATION
+  qa: PASS
   regression: PASS
   release_gate: NOT_EVALUATED
 authorization:
-  implementation_scope: "TP-05 — Integración, Resumen Operativo, 18 Escenarios y Preparación de Demostración (IMPLEMENTADO)"
+  implementation_scope: "TP-05 — Integración, Resumen Operativo, 18 Escenarios y Preparación de Demostración (CONCLUIDO Y VALIDADO POR QA)"
   authorized_by: "Sponsor (Miguel Ulloa)"
   authorized_at: "2026-09-23T11:53:49-03:00"
-  notes: "TP-04 aceptado formalmente como DONE el 2026-09-23 sobre la línea base 3ec5b2a. TP-05 implementado y en PENDING_VALIDATION."
+  notes: "TP-05 validado con veredicto PASS por QA independiente (QA-TP-05). TP-05 transicionado a DONE. CHG-001 en READY_FOR_RELEASE."
   expires_on_scope_change: true
 next_action:
-  sponsor: "Revisar la evidencia durable de TP-05 (EV-TP-05.md), verificar el recorrido integral de 18 escenarios, guion de demo de 5 min y autorizar la evaluación de QA independiente."
-  internal: AWAITING_SPONSOR_REVIEW_TP05
+  sponsor: "Autorizar la evaluación formal del Release Gate de CHG-001 mediante el comando /aagm-release-gate."
+  internal: AWAITING_RELEASE_GATE_AUTHORIZATION
 dashboard:
   sync_status: SYNCED
-  last_synced_at: "2026-09-23T12:55:00-03:00"
+  last_synced_at: "2026-09-23T20:30:00-03:00"
 
