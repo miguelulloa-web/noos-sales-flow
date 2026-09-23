@@ -3,8 +3,8 @@ requirement: "MVP de Captura y Seguimiento Comercial con IA para NoosAdvisory ba
 modality: MUST
 type: MODIFICATION
 priority: HIGH
-status: PENDING_VALIDATION
-current_stage: PENDING_VALIDATION
+status: IMPLEMENTING
+current_stage: IMPLEMENTING
 owner: ORCHESTRATOR_PM
 decision_refs:
   - "Ruta A aprobada por Sponsor (2026-09-14)"
@@ -13,13 +13,13 @@ impact_analysis_ref: "docs/aagm/04-delivery/impact-analysis/IA-CHG-001.md"
 approvals:
   requirement: "Aprobado por Sponsor (2026-09-14)"
   solution_design: "Aprobado por Sponsor (2026-09-14)"
-  implementation_scope: "Autorizado por Sponsor para TP-01 (2026-09-15), TP-02 (2026-09-16), TP-03 (2026-09-17) y TP-04 (2026-09-21)"
+  implementation_scope: "Autorizado por Sponsor para TP-01 (2026-09-15), TP-02 (2026-09-16), TP-03 (2026-09-17), TP-04 (2026-09-21, aceptado 2026-09-23) y TP-05 (2026-09-23)"
 task_packets:
   - TP-01 (DONE)
   - TP-02 (DONE)
   - TP-03 (DONE)
-  - TP-04 (PENDING_VALIDATION)
-  - TP-05 (DRAFT)
+  - TP-04 (DONE)
+  - TP-05 (IMPLEMENTING)
 commits_or_prs:
   - "8f214f5 (feat: implement TP-01 local foundation, persistence, auth and audit log)"
   - "779a048 (fix(auth-db): enforce db triggers, exact origin matching, secure bootstrap and real blackbox tests)"
@@ -35,6 +35,7 @@ commits_or_prs:
   - "057963e (fix(triage): purge credentials, enforce authentic browser validation, and fix mobile responsiveness)"
   - "4c4e8b9 (fix(triage): harden browser validation, enforce strict clipboard match, and clarify secret traceability)"
   - "0686aaf (feat(tracking): implement TP-04 commercial tracking, inbox filters, timezone and safe exports)"
+  - "3ec5b2a (fix(tracking): preserve foreign keys and validate DST-safe exports)"
 evidence:
   - "docs/aagm/02-solution-design/EV-003-solution-design.md"
   - "docs/aagm/03-planning/EV-004-planning.md"
@@ -46,4 +47,4 @@ qa_ref: null
 release: null
 environment: DEV
 production_validation_ref: null
-next_action: "Presentar evidencia de entrega EV-TP-04 al Sponsor para revisión y decisión formal de cierre"
+next_action: "Implementar TP-05: Integración, Resumen Operativo, 18 Escenarios y Preparación de Demostración"

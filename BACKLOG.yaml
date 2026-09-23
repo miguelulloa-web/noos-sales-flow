@@ -23,10 +23,10 @@ task_packets:
   - id: TP-04
     change_id: CHG-001
     summary: "Gestión Comercial, Bandeja de Vencimientos, Exportación CSV/JSON y Resiliencia"
-    status: PENDING_VALIDATION
+    status: DONE
     owner: DEVELOPER
   - id: TP-05
     change_id: CHG-001
     summary: "Integración, Resumen Operativo, 18 Escenarios y Preparación de Demostración"
-    status: READY
+    status: IN_PROGRESS
     owner: DEVELOPER

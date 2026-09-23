@@ -45,7 +45,7 @@ changes:
 environments:
   - logical_name: DEV
     physical_target: "http://localhost:3000"
-    version: "v0.4.0-dev (TP-04 PENDING_VALIDATION)"
+    version: "v0.4.0 (TP-04 DONE / TP-05 IN_PROGRESS)"
     protection: UNPROTECTED
     validation: "PASS (48/48 pruebas automatizadas PASS, migración atómica con verificación de claves foráneas PASS, manejo robusto DST America/Santiago PASS y exportación agrupada por lotes PASS)"
   - logical_name: STAGE_GCP
@@ -59,14 +59,15 @@ quality:
   regression: PASS
   release_gate: NOT_EVALUATED
 authorization:
-  implementation_scope: "TP-04 — Gestión Comercial, Bandeja de Vencimientos, Exportación CSV/JSON y Resiliencia (PENDING_VALIDATION)"
+  implementation_scope: "TP-05 — Integración, Resumen Operativo, 18 Escenarios y Preparación de Demostración (AUTORIZADO)"
   authorized_by: "Sponsor (Miguel Ulloa)"
-  authorized_at: "2026-09-21T22:20:00-03:00"
+  authorized_at: "2026-09-23T11:53:49-03:00"
+  notes: "TP-04 aceptado formalmente como DONE el 2026-09-23 sobre la línea base 3ec5b2a"
   expires_on_scope_change: true
 next_action:
-  sponsor: "Revisión y decisión formal de aceptación sobre TP-04 en PENDING_VALIDATION con evidencia EV-TP-04.md y 48/48 pruebas PASS."
-  internal: AWAITING_SPONSOR_TP04_VALIDATION
+  sponsor: "TP-04 aceptado formalmente el 2026-09-23. Autorización formal de TP-05 otorgada. Ejecutar e implementar TP-05."
+  internal: IMPLEMENT_TP05
 dashboard:
   sync_status: SYNCED
-  last_synced_at: "2026-09-23T11:45:00-03:00"
+  last_synced_at: "2026-09-23T11:55:00-03:00"
 
