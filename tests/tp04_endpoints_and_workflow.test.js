@@ -5,14 +5,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import { createApp } from '../src/app.js';
-import { 
-  getDb, 
-  closeDb, 
-  initSchema, 
-  createUser, 
-  createSession, 
+import {
+  getDb,
+  closeDb,
+  initSchema,
+  createUser,
+  createSession,
   createLead,
-  getLeadById 
+  getLeadById
 } from '../src/db.js';
 import { generateSessionToken, hashSessionToken } from '../src/auth.js';
 import { Readable, PassThrough } from 'node:stream';
@@ -76,10 +76,10 @@ function invokeApp(app, { method = 'GET', url = '/', headers = {}, body = null }
     req._read = () => {};
     req.method = method;
     req.url = url;
-    req.headers = { 
+    req.headers = {
       'origin': 'http://localhost:3000',
       'host': 'localhost:3000',
-      ...headers 
+      ...headers
     };
     req.socket = mockSocket;
     req.connection = mockSocket;

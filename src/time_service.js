@@ -49,18 +49,28 @@ export function getSystemTimezone() {
  * @param {string} timezone - Valid IANA timezone identifier
  * @returns {Date}
  */
-export function localWallClockToUtcDate(year, month, day, hour = 0, minute = 0, second = 0, timezone = getSystemTimezone()) {
-  if (!isValidTimezone(timezone)) {
-    const error = new Error(`Zona horaria inválida: '${timezone}'`);
-    error.code = 'INVALID_TIMEZONE';
-    throw error;
-  }
+/**
+ * Validates whether year, month, and day form a valid calendar date (e.g. rejects Feb 30).
+ * @param {number} year
+ * @param {number} month - 1-12
+ * @param {number} day - 1-31
+ * @returns {boolean}
+ */
+export function isValidCalendarDate(year, month, day) {
+  if (typeof year !== 'number' || typeof month !== 'number' || typeof day !== 'number') return false;
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return false;
+  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
+  const d = new Date(Date.UTC(year, month - 1, day));
+  return d.getUTCFullYear() === year && (d.getUTCMonth() + 1) === month && d.getUTCDate() === day;
+}
 
-  // Initial UTC guess
-  const guessUtcMs = Date.UTC(year, month - 1, day, hour, minute, second);
-  const guessDate = new Date(guessUtcMs);
-
-  // Format guess in the target timezone to find the wall-clock shift
+/**
+ * Extracts wall-clock numeric parts from a Date in a specific timezone using Intl.DateTimeFormat.
+ * @param {Date} date
+ * @param {string} timezone
+ * @returns {{year: number, month: number, day: number, hour: number, minute: number, second: number}}
+ */
+function getWallClockParts(date, timezone) {
   const formatter = new Intl.DateTimeFormat('en-US', {
     timeZone: timezone,
     year: 'numeric',
@@ -71,21 +81,108 @@ export function localWallClockToUtcDate(year, month, day, hour = 0, minute = 0, 
     second: 'numeric',
     hourCycle: 'h23'
   });
-
-  const parts = formatter.formatToParts(guessDate);
+  const parts = formatter.formatToParts(date);
   const map = {};
   for (const p of parts) {
     if (p.type !== 'literal') {
       map[p.type] = parseInt(p.value, 10);
     }
   }
+  return map;
+}
 
-  const localFromGuessMs = Date.UTC(map.year, map.month - 1, map.day, map.hour, map.minute, map.second);
-  const offsetMs = localFromGuessMs - guessUtcMs;
+/**
+ * Finds all exact UTC Date instances that evaluate to the specified local wall-clock components
+ * in the given timezone. Handles DST gaps (returns []) and DST overlaps (returns multiple).
+ *
+ * @param {number} year
+ * @param {number} month
+ * @param {number} day
+ * @param {number} hour
+ * @param {number} minute
+ * @param {number} second
+ * @param {string} timezone
+ * @returns {Date[]}
+ */
+export function findUtcCandidatesForWallClock(year, month, day, hour, minute, second, timezone) {
+  const approxUtcMs = Date.UTC(year, month - 1, day, hour, minute, second);
+  const candidateOffsets = new Set();
 
-  // The actual UTC time is guessUtcMs minus the timezone offset
-  const actualUtcMs = guessUtcMs - offsetMs;
-  return new Date(actualUtcMs);
+  // Probe offsets in the local range [-28h, +28h] at 30-minute intervals to catch any active DST transitions
+  for (let offsetHours = -28; offsetHours <= 28; offsetHours += 0.5) {
+    const testUtc = approxUtcMs + offsetHours * 3600 * 1000;
+    const parts = getWallClockParts(new Date(testUtc), timezone);
+    const localMs = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+    candidateOffsets.add(localMs - testUtc);
+  }
+
+  const matches = [];
+  for (const offsetMs of candidateOffsets) {
+    const candidateUtcMs = approxUtcMs - offsetMs;
+    const parts = getWallClockParts(new Date(candidateUtcMs), timezone);
+    if (
+      parts.year === year &&
+      parts.month === month &&
+      parts.day === day &&
+      parts.hour === hour &&
+      parts.minute === minute &&
+      parts.second === second
+    ) {
+      matches.push(new Date(candidateUtcMs));
+    }
+  }
+
+  matches.sort((a, b) => a.getTime() - b.getTime());
+  return matches;
+}
+
+/**
+ * Converts local wall-clock date components in a given IANA timezone into a UTC Date.
+ * Uses round-trip candidate matching to detect DST non-existent hours and DST ambiguous hours.
+ *
+ * @param {number} year
+ * @param {number} month - 1-12
+ * @param {number} day - 1-31
+ * @param {number} hour - 0-23
+ * @param {number} minute - 0-59
+ * @param {number} second - 0-59
+ * @param {string} timezone - Valid IANA timezone identifier
+ * @returns {Date}
+ */
+export function localWallClockToUtcDate(year, month, day, hour = 0, minute = 0, second = 0, timezone = getSystemTimezone()) {
+  if (!isValidTimezone(timezone)) {
+    const error = new Error(`Zona horaria inválida: '${timezone}'`);
+    error.code = 'INVALID_TIMEZONE';
+    throw error;
+  }
+
+  if (!isValidCalendarDate(year, month, day)) {
+    const error = new Error(`Fecha de calendario inválida o inexistente: ${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
+    error.code = 'INVALID_DUE_DATE';
+    throw error;
+  }
+
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59) {
+    const error = new Error(`Valores horarios fuera de rango: ${hour}:${minute}:${second}`);
+    error.code = 'INVALID_DUE_DATE';
+    throw error;
+  }
+
+  const candidates = findUtcCandidatesForWallClock(year, month, day, hour, minute, second, timezone);
+
+  if (candidates.length === 0) {
+    const error = new Error(`La fecha/hora local solicitada no existe debido a cambio de horario (DST): '${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')} ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}' en ${timezone}`);
+    error.code = 'INVALID_DUE_DATE_NONEXISTENT';
+    throw error;
+  }
+
+  if (candidates.length > 1) {
+    const error = new Error(`La fecha/hora local solicitada es ambigua debido a cambio de horario (DST): '${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')} ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}' en ${timezone}. Especifique un offset explícito.`);
+    error.code = 'INVALID_DUE_DATE_AMBIGUOUS';
+    throw error;
+  }
+
+  return candidates[0];
 }
 
 /**
@@ -93,9 +190,13 @@ export function localWallClockToUtcDate(year, month, day, hour = 0, minute = 0, 
  *
  * Rules:
  * 1. Rejects missing, non-string, or completely invalid date strings (code: 'INVALID_DUE_DATE').
- * 2. If the string contains an explicit timezone offset (Z, +HH:mm, -HH:mm), normalizes directly to UTC.
+ * 2. If the string contains an explicit timezone offset (Z, +HH:mm, -HH:mm), validates calendar date
+ *    and normalizes directly to UTC preserving the exact specified instant.
  * 3. If the string lacks an offset (e.g. 'YYYY-MM-DDTHH:mm', 'YYYY-MM-DD HH:mm:ss', 'YYYY-MM-DD'),
- *    interprets it explicitly in the system timezone (default 'America/Santiago') and converts to UTC ISO8601.
+ *    interprets it in the system timezone (default 'America/Santiago') using round-trip verification:
+ *    - Throws 'INVALID_DUE_DATE_NONEXISTENT' if the local time falls in a DST spring-forward gap.
+ *    - Throws 'INVALID_DUE_DATE_AMBIGUOUS' if the local time falls in a DST fall-back repeated hour.
+ *    - Never silently shifts the requested wall-clock hour.
  *
  * @param {string} input
  * @param {string} [timezone]
@@ -110,10 +211,18 @@ export function parseDueDateToUtc(input, timezone = getSystemTimezone()) {
 
   const trimmed = input.trim();
 
-  // Pattern A: Explicit timezone offset present
-  // Matches ...Z or ...+HH:mm or ...-HH:mm or ...+HHmm or ...-HHmm
-  const explicitTzRegex = /(Z|[+-]\d{2}:?\d{2})$/i;
-  if (explicitTzRegex.test(trimmed)) {
+  // Pattern A: Explicit timezone offset present (e.g. YYYY-MM-DDTHH:mm[:ss][.sss]Z or +/-HH:mm)
+  const explicitTzRegex = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}(?:\.\d+)?))?)?(Z|[+-]\d{2}:?\d{2})$/i;
+  const explicitMatch = explicitTzRegex.exec(trimmed);
+  if (explicitMatch) {
+    const year = parseInt(explicitMatch[1], 10);
+    const month = parseInt(explicitMatch[2], 10);
+    const day = parseInt(explicitMatch[3], 10);
+    if (!isValidCalendarDate(year, month, day)) {
+      const error = new Error(`Fecha de calendario inválida en fecha límite: '${trimmed}'`);
+      error.code = 'INVALID_DUE_DATE';
+      throw error;
+    }
     const d = new Date(trimmed);
     if (isNaN(d.getTime())) {
       const error = new Error(`Fecha límite con offset inválida: '${trimmed}'`);
@@ -139,19 +248,7 @@ export function parseDueDateToUtc(input, timezone = getSystemTimezone()) {
   const minute = match[5] !== undefined ? parseInt(match[5], 10) : 59;
   const second = match[6] !== undefined ? parseInt(match[6], 10) : 59;
 
-  if (month < 1 || month > 12 || day < 1 || day > 31 || hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59) {
-    const error = new Error(`Valores de fecha límite fuera de rango: '${trimmed}'`);
-    error.code = 'INVALID_DUE_DATE';
-    throw error;
-  }
-
   const utcDate = localWallClockToUtcDate(year, month, day, hour, minute, second, timezone);
-  if (isNaN(utcDate.getTime())) {
-    const error = new Error(`Conversión de fecha límite a UTC falló: '${trimmed}'`);
-    error.code = 'INVALID_DUE_DATE';
-    throw error;
-  }
-
   return utcDate.toISOString();
 }
 

@@ -47,6 +47,7 @@ import {
   archiveLead,
   getActionsByLeadId,
   getLatestActionByLeadId,
+  getExportLeadsBatch,
   getDb
 } from './db.js';
 import {
@@ -494,13 +495,7 @@ export function createApp(options = {}) {
 
   // Exports: Safe CSV export with formula injection mitigation (CWE-1236)
   app.get('/api/leads/export/csv', requireAuth, (req, res) => {
-    const leads = listLeadsWithTriageSummary({ limit: 2000, offset: 0 });
-    const fullLeads = leads.map(l => ({
-      lead: l,
-      current_confirmed_facts: getCurrentConfirmedFactsByLeadId(l.id),
-      current_draft: getLatestDraftByLeadId(l.id),
-      latest_action: getLatestActionByLeadId(l.id)
-    }));
+    const fullLeads = getExportLeadsBatch({ limit: 2000, offset: 0, includeHistory: false });
     const csvContent = generateLeadsCsv(fullLeads);
     const dateStr = new Date().toISOString().split('T')[0];
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -510,16 +505,7 @@ export function createApp(options = {}) {
 
   // Exports: Structured JSON export
   app.get('/api/leads/export/json', requireAuth, (req, res) => {
-    const leads = listLeadsWithTriageSummary({ limit: 2000, offset: 0 });
-    const fullLeads = leads.map(l => ({
-      lead: l,
-      current_confirmed_facts: getCurrentConfirmedFactsByLeadId(l.id),
-      confirmed_facts_history: getConfirmedFactsHistoryByLeadId(l.id),
-      current_draft: getLatestDraftByLeadId(l.id),
-      drafts_history: getDraftsHistoryByLeadId(l.id),
-      actions: getActionsByLeadId(l.id),
-      latest_action: getLatestActionByLeadId(l.id)
-    }));
+    const fullLeads = getExportLeadsBatch({ limit: 2000, offset: 0, includeHistory: true });
     const jsonContent = generateLeadsJson(fullLeads);
     const dateStr = new Date().toISOString().split('T')[0];
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -584,7 +570,7 @@ export function createApp(options = {}) {
       if (err.code === 'USER_NOT_FOUND' || err.code === 'LEAD_NOT_FOUND') {
         return res.status(404).json({ error: err.message, code: err.code });
       }
-      if (['MISSING_ASSIGNED_USER', 'INVALID_ACTION_TYPE', 'MISSING_ACTION_DESCRIPTION', 'INVALID_DUE_DATE'].includes(err.code)) {
+      if (['MISSING_ASSIGNED_USER', 'INVALID_ACTION_TYPE', 'MISSING_ACTION_DESCRIPTION', 'INVALID_DUE_DATE', 'INVALID_DUE_DATE_NONEXISTENT', 'INVALID_DUE_DATE_AMBIGUOUS'].includes(err.code)) {
         return res.status(400).json({ error: err.message, code: err.code });
       }
       return res.status(500).json({ error: err.message });
@@ -618,7 +604,7 @@ export function createApp(options = {}) {
       if (['ACTION_ALREADY_COMPLETED', 'ACTION_ALREADY_CANCELLED'].includes(err.code)) {
         return res.status(409).json({ error: err.message, code: err.code });
       }
-      if (err.code === 'MISSING_RESULT_SUMMARY') {
+      if (['MISSING_RESULT_SUMMARY', 'MISSING_ASSIGNED_USER', 'INVALID_ACTION_TYPE', 'MISSING_ACTION_DESCRIPTION', 'INVALID_DUE_DATE', 'INVALID_DUE_DATE_NONEXISTENT', 'INVALID_DUE_DATE_AMBIGUOUS'].includes(err.code)) {
         return res.status(400).json({ error: err.message, code: err.code });
       }
       return res.status(500).json({ error: err.message });

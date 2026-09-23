@@ -90,7 +90,7 @@ export function initSchema(db = getDb()) {
       text_hash TEXT NOT NULL,
       raw_text TEXT NOT NULL,
       source TEXT NOT NULL DEFAULT 'MANUAL',
-      status TEXT NOT NULL DEFAULT 'PENDING_TRIAGE' CHECK(status IN ('PENDING_TRIAGE', 'IN_REVIEW', 'CONFIRMED', 'RESPONDED', 'ARCHIVED', 'CAPTURED', 'ANALYZED', 'TRIAGED', 'ACTIONABLE', 'DISCARDED')),
+      status TEXT NOT NULL DEFAULT 'PENDING_TRIAGE' CHECK(status IN ('PENDING_TRIAGE', 'IN_REVIEW', 'CONFIRMED', 'RESPONDED', 'ARCHIVED')),
       is_possible_duplicate INTEGER NOT NULL DEFAULT 0,
       duplicate_of_lead_id TEXT,
       sender_name TEXT,
@@ -229,6 +229,14 @@ export function initSchema(db = getDb()) {
 
   // Run migration from legacy to canonical lead statuses
   migrateLeadStatuses(db);
+
+  // Validate that no foreign key constraint is violated
+  const fkViolations = db.prepare('PRAGMA foreign_key_check;').all();
+  if (fkViolations && fkViolations.length > 0) {
+    const error = new Error(`Foreign key check failed in initSchema: ${JSON.stringify(fkViolations)}`);
+    error.code = 'FK_CHECK_FAILED';
+    throw error;
+  }
 
   // Seed default AI configs if not present
   const checkConfig = db.prepare('SELECT id, model_identifier FROM ai_config WHERE config_key = ?').get('LEAD_EXTRACTION_CONFIG');
@@ -1202,72 +1210,231 @@ export function transitionOverdueActions(db = getDb(), serverNow = new Date(), a
  */
 export function migrateLeadStatuses(db = getDb()) {
   const tableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='leads'").get();
-  if (tableInfo && tableInfo.sql && !tableInfo.sql.includes('PENDING_TRIAGE')) {
+  if (tableInfo && tableInfo.sql && (tableInfo.sql.includes("'CAPTURED'") || !tableInfo.sql.includes("'PENDING_TRIAGE'"))) {
     db.exec('PRAGMA foreign_keys = OFF;');
-    db.exec(`
-      ALTER TABLE leads RENAME TO _leads_legacy_migration;
+    let inTx = false;
+    try {
+      db.exec('BEGIN IMMEDIATE;');
+      inTx = true;
 
-      CREATE TABLE leads (
-        id TEXT PRIMARY KEY,
-        idempotency_key TEXT UNIQUE NOT NULL,
-        text_hash TEXT NOT NULL,
-        raw_text TEXT NOT NULL,
-        source TEXT NOT NULL DEFAULT 'MANUAL',
-        status TEXT NOT NULL DEFAULT 'PENDING_TRIAGE' CHECK(status IN ('PENDING_TRIAGE', 'IN_REVIEW', 'CONFIRMED', 'RESPONDED', 'ARCHIVED', 'CAPTURED', 'ANALYZED', 'TRIAGED', 'ACTIONABLE', 'DISCARDED')),
-        is_possible_duplicate INTEGER NOT NULL DEFAULT 0,
-        duplicate_of_lead_id TEXT,
-        sender_name TEXT,
-        sender_email TEXT,
-        company_name TEXT,
-        created_by_user_id TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        FOREIGN KEY (duplicate_of_lead_id) REFERENCES leads(id) ON DELETE SET NULL,
-        FOREIGN KEY (created_by_user_id) REFERENCES users(id)
-      );
+      db.exec(`
+        CREATE TABLE leads_new (
+          id TEXT PRIMARY KEY,
+          idempotency_key TEXT UNIQUE NOT NULL,
+          text_hash TEXT NOT NULL,
+          raw_text TEXT NOT NULL,
+          source TEXT NOT NULL DEFAULT 'MANUAL',
+          status TEXT NOT NULL DEFAULT 'PENDING_TRIAGE' CHECK(status IN ('PENDING_TRIAGE', 'IN_REVIEW', 'CONFIRMED', 'RESPONDED', 'ARCHIVED')),
+          is_possible_duplicate INTEGER NOT NULL DEFAULT 0,
+          duplicate_of_lead_id TEXT,
+          sender_name TEXT,
+          sender_email TEXT,
+          company_name TEXT,
+          created_by_user_id TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          FOREIGN KEY (duplicate_of_lead_id) REFERENCES leads(id) ON DELETE SET NULL,
+          FOREIGN KEY (created_by_user_id) REFERENCES users(id)
+        );
 
-      INSERT INTO leads (
-        id, idempotency_key, text_hash, raw_text, source, status,
-        is_possible_duplicate, duplicate_of_lead_id, sender_name, sender_email,
-        company_name, created_by_user_id, created_at, updated_at
-      )
-      SELECT
-        id, idempotency_key, text_hash, raw_text, source,
-        CASE status
-          WHEN 'CAPTURED' THEN 'PENDING_TRIAGE'
-          WHEN 'ANALYZED' THEN 'IN_REVIEW'
-          WHEN 'TRIAGED' THEN 'CONFIRMED'
-          WHEN 'ACTIONABLE' THEN 'CONFIRMED'
-          WHEN 'DISCARDED' THEN 'ARCHIVED'
-          ELSE status
-        END,
-        is_possible_duplicate, duplicate_of_lead_id, sender_name, sender_email,
-        company_name, created_by_user_id, created_at, updated_at
-      FROM _leads_legacy_migration;
+        INSERT INTO leads_new (
+          id, idempotency_key, text_hash, raw_text, source, status,
+          is_possible_duplicate, duplicate_of_lead_id, sender_name, sender_email,
+          company_name, created_by_user_id, created_at, updated_at
+        )
+        SELECT
+          id, idempotency_key, text_hash, raw_text, source,
+          CASE status
+            WHEN 'CAPTURED' THEN 'PENDING_TRIAGE'
+            WHEN 'ANALYZED' THEN 'IN_REVIEW'
+            WHEN 'TRIAGED' THEN 'CONFIRMED'
+            WHEN 'ACTIONABLE' THEN 'CONFIRMED'
+            WHEN 'DISCARDED' THEN 'ARCHIVED'
+            ELSE status
+          END,
+          is_possible_duplicate, duplicate_of_lead_id, sender_name, sender_email,
+          company_name, created_by_user_id, created_at, updated_at
+        FROM leads;
 
-      DROP TABLE _leads_legacy_migration;
+        DROP TABLE leads;
 
-      CREATE INDEX IF NOT EXISTS idx_leads_idempotency_key ON leads(idempotency_key);
-      CREATE INDEX IF NOT EXISTS idx_leads_text_hash ON leads(text_hash);
-      CREATE INDEX IF NOT EXISTS idx_leads_sender_email ON leads(sender_email);
-      CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
-    `);
-    db.exec('PRAGMA foreign_keys = ON;');
-  }
+        ALTER TABLE leads_new RENAME TO leads;
 
-  return runInTransaction(db, () => {
-    const resCaptured = db.prepare("UPDATE leads SET status = 'PENDING_TRIAGE' WHERE status = 'CAPTURED'").run();
-    const resAnalyzed = db.prepare("UPDATE leads SET status = 'IN_REVIEW' WHERE status = 'ANALYZED'").run();
-    const resTriaged = db.prepare("UPDATE leads SET status = 'CONFIRMED' WHERE status IN ('TRIAGED', 'ACTIONABLE')").run();
-    const resDiscarded = db.prepare("UPDATE leads SET status = 'ARCHIVED' WHERE status = 'DISCARDED'").run();
+        CREATE INDEX IF NOT EXISTS idx_leads_idempotency_key ON leads(idempotency_key);
+        CREATE INDEX IF NOT EXISTS idx_leads_text_hash ON leads(text_hash);
+        CREATE INDEX IF NOT EXISTS idx_leads_sender_email ON leads(sender_email);
+        CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
+      `);
+
+      // Pre-commit validation of foreign keys: if violated, throw before commit
+      const preCommitFkViolations = db.prepare('PRAGMA foreign_key_check;').all();
+      if (preCommitFkViolations && preCommitFkViolations.length > 0) {
+        const err = new Error(`Foreign key check failed before commit: ${JSON.stringify(preCommitFkViolations)}`);
+        err.code = 'FK_CHECK_FAILED';
+        throw err;
+      }
+
+      db.exec('COMMIT;');
+      inTx = false;
+    } catch (err) {
+      if (inTx) {
+        try { db.exec('ROLLBACK;'); } catch (_) {}
+      }
+      throw err;
+    } finally {
+      // Centralized guarantee that foreign_keys is always restored to ON
+      db.exec('PRAGMA foreign_keys = ON;');
+    }
+
+    // Defensive post-commit check
+    const postCommitFkViolations = db.prepare('PRAGMA foreign_key_check;').all();
+    if (postCommitFkViolations && postCommitFkViolations.length > 0) {
+      const err = new Error(`Foreign key check failed after migration: ${JSON.stringify(postCommitFkViolations)}`);
+      err.code = 'FK_CHECK_FAILED';
+      throw err;
+    }
 
     return {
-      migratedCaptured: resCaptured.changes,
-      migratedAnalyzed: resAnalyzed.changes,
-      migratedTriaged: resTriaged.changes,
-      migratedDiscarded: resDiscarded.changes
+      migrated: true,
+      fkCheckPassed: true
     };
-  });
+  }
+
+  // Verify foreign keys on already migrated tables as well
+  const fkViolations = db.prepare('PRAGMA foreign_key_check;').all();
+  if (fkViolations && fkViolations.length > 0) {
+    const err = new Error(`Foreign key check failed: ${JSON.stringify(fkViolations)}`);
+    err.code = 'FK_CHECK_FAILED';
+    throw err;
+  }
+
+  return {
+    migrated: false,
+    fkCheckPassed: true
+  };
+}
+
+/**
+ * Optimized batched export query: fetches leads, current facts, drafts, and actions
+ * using grouped queries instead of N+1 individual queries per lead.
+ */
+export function getExportLeadsBatch({ limit = 2000, offset = 0, includeHistory = false } = {}, db = getDb()) {
+  const leads = listLeadsWithTriageSummary({ limit, offset }, db);
+  if (!leads || leads.length === 0) {
+    return [];
+  }
+
+  const leadIds = leads.map(l => l.id);
+  const now = new Date();
+
+  const chunkSize = 500;
+  const chunkArray = (arr, size) => {
+    const chunks = [];
+    for (let i = 0; i < arr.length; i += size) {
+      chunks.push(arr.slice(i, i + size));
+    }
+    return chunks;
+  };
+
+  const idChunks = chunkArray(leadIds, chunkSize);
+
+  // 1. Facts
+  const factsMap = new Map();
+  const factsHistoryMap = new Map();
+  for (const chunk of idChunks) {
+    const placeholders = chunk.map(() => '?').join(',');
+    if (includeHistory) {
+      const allFacts = db.prepare(`
+        SELECT f.*, u.name AS confirmed_by_user_name
+        FROM lead_confirmed_facts f
+        LEFT JOIN users u ON f.confirmed_by_user_id = u.id
+        WHERE f.lead_id IN (${placeholders})
+        ORDER BY f.version DESC
+      `).all(...chunk);
+      for (const f of allFacts) {
+        if (!factsHistoryMap.has(f.lead_id)) factsHistoryMap.set(f.lead_id, []);
+        factsHistoryMap.get(f.lead_id).push(f);
+        if (f.is_current === 1 && !factsMap.has(f.lead_id)) {
+          factsMap.set(f.lead_id, f);
+        }
+      }
+    } else {
+      const currentFacts = db.prepare(`
+        SELECT f.*, u.name AS confirmed_by_user_name
+        FROM lead_confirmed_facts f
+        LEFT JOIN users u ON f.confirmed_by_user_id = u.id
+        WHERE f.is_current = 1 AND f.lead_id IN (${placeholders})
+      `).all(...chunk);
+      for (const f of currentFacts) {
+        factsMap.set(f.lead_id, f);
+      }
+    }
+  }
+
+  // 2. Drafts
+  const draftsMap = new Map();
+  const draftsHistoryMap = new Map();
+  for (const chunk of idChunks) {
+    const placeholders = chunk.map(() => '?').join(',');
+    const drafts = db.prepare(`
+      SELECT d.*
+      FROM response_drafts d
+      WHERE d.lead_id IN (${placeholders})
+      ORDER BY d.created_at DESC
+    `).all(...chunk);
+    for (const d of drafts) {
+      if (!draftsMap.has(d.lead_id)) {
+        draftsMap.set(d.lead_id, d);
+      }
+      if (includeHistory) {
+        if (!draftsHistoryMap.has(d.lead_id)) draftsHistoryMap.set(d.lead_id, []);
+        draftsHistoryMap.get(d.lead_id).push(d);
+      }
+    }
+  }
+
+  // 3. Actions
+  const latestActionMap = new Map();
+  const actionsHistoryMap = new Map();
+  for (const chunk of idChunks) {
+    const placeholders = chunk.map(() => '?').join(',');
+    const actions = db.prepare(`
+      SELECT a.*,
+        u_assign.name AS assigned_user_name,
+        u_comp.name AS completed_by_user_name
+      FROM lead_actions a
+      LEFT JOIN users u_assign ON a.assigned_user_id = u_assign.id
+      LEFT JOIN users u_comp ON a.completed_by_user_id = u_comp.id
+      WHERE a.lead_id IN (${placeholders})
+      ORDER BY a.created_at DESC
+    `).all(...chunk);
+
+    for (const a of actions) {
+      a.effective_status = computeEffectiveActionStatus(a, now);
+      if (!latestActionMap.has(a.lead_id)) {
+        latestActionMap.set(a.lead_id, a);
+      } else {
+        const existing = latestActionMap.get(a.lead_id);
+        if (existing.status !== 'PENDING' && existing.status !== 'OVERDUE' && (a.status === 'PENDING' || a.status === 'OVERDUE')) {
+          latestActionMap.set(a.lead_id, a);
+        }
+      }
+      if (includeHistory) {
+        if (!actionsHistoryMap.has(a.lead_id)) actionsHistoryMap.set(a.lead_id, []);
+        actionsHistoryMap.get(a.lead_id).push(a);
+      }
+    }
+  }
+
+  return leads.map(l => ({
+    lead: l,
+    current_confirmed_facts: factsMap.get(l.id) || null,
+    confirmed_facts_history: factsHistoryMap.get(l.id) || [],
+    current_draft: draftsMap.get(l.id) || null,
+    drafts_history: draftsHistoryMap.get(l.id) || [],
+    latest_action: latestActionMap.get(l.id) || null,
+    actions: actionsHistoryMap.get(l.id) || (latestActionMap.has(l.id) ? [latestActionMap.get(l.id)] : [])
+  }));
 }
 
 /**

@@ -3,8 +3,8 @@ requirement: "MVP de Captura y Seguimiento Comercial con IA para NoosAdvisory ba
 modality: MUST
 type: MODIFICATION
 priority: HIGH
-status: IMPLEMENTING
-current_stage: IMPLEMENTING
+status: PENDING_VALIDATION
+current_stage: PENDING_VALIDATION
 owner: ORCHESTRATOR_PM
 decision_refs:
   - "Ruta A aprobada por Sponsor (2026-09-14)"
@@ -34,6 +34,7 @@ commits_or_prs:
   - "33da4af (docs(delivery): register EV-TP-03 and close TP-03 as DONE with empirical and browser validation PASS)"
   - "057963e (fix(triage): purge credentials, enforce authentic browser validation, and fix mobile responsiveness)"
   - "4c4e8b9 (fix(triage): harden browser validation, enforce strict clipboard match, and clarify secret traceability)"
+  - "0686aaf (feat(tracking): implement TP-04 commercial tracking, inbox filters, timezone and safe exports)"
 evidence:
   - "docs/aagm/02-solution-design/EV-003-solution-design.md"
   - "docs/aagm/03-planning/EV-004-planning.md"

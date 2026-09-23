@@ -21,6 +21,7 @@ transition:
     - "docs/aagm/04-delivery/evidence/EV-TP-01.md"
     - "docs/aagm/04-delivery/evidence/EV-TP-02.md"
     - "docs/aagm/04-delivery/evidence/EV-TP-03.md"
+    - "docs/aagm/04-delivery/evidence/EV-TP-04.md"
   recorded_at: "2026-09-16T11:40:00-03:00"
 readiness:
   delivery: IN_PROGRESS
@@ -44,9 +45,9 @@ changes:
 environments:
   - logical_name: DEV
     physical_target: "http://localhost:3000"
-    version: "v0.3.0-dev (TP-03 COMPLETO)"
+    version: "v0.4.0-dev (TP-04 PENDING_VALIDATION)"
     protection: UNPROTECTED
-    validation: "PASS (40/40 pruebas, verificación empírica Gemini PASS y validación interactiva auténtica en navegador Chromium PASS)"
+    validation: "PASS (48/48 pruebas automatizadas PASS, migración atómica con verificación de claves foráneas PASS, manejo robusto DST America/Santiago PASS y exportación agrupada por lotes PASS)"
   - logical_name: STAGE_GCP
     physical_target: "Google Cloud Run"
     version: null
@@ -58,14 +59,14 @@ quality:
   regression: PASS
   release_gate: NOT_EVALUATED
 authorization:
-  implementation_scope: "TP-03 — Triage UI Master-Detail, Hechos Confirmados y Borradores con Estado STALE (ACEPTADO Y CERRADO)"
+  implementation_scope: "TP-04 — Gestión Comercial, Bandeja de Vencimientos, Exportación CSV/JSON y Resiliencia (PENDING_VALIDATION)"
   authorized_by: "Sponsor (Miguel Ulloa)"
-  authorized_at: "2026-09-17T13:43:54-03:00 (aceptado formalmente 2026-09-21)"
+  authorized_at: "2026-09-21T22:20:00-03:00"
   expires_on_scope_change: true
 next_action:
-  sponsor: "Autorización formal de TP-04 otorgada el 2026-09-21. Ejecutar e implementar TP-04."
-  internal: IMPLEMENT_TP04
+  sponsor: "Revisión y decisión formal de aceptación sobre TP-04 en PENDING_VALIDATION con evidencia EV-TP-04.md y 48/48 pruebas PASS."
+  internal: AWAITING_SPONSOR_TP04_VALIDATION
 dashboard:
   sync_status: SYNCED
-  last_synced_at: "2026-09-21T22:25:00-03:00"
+  last_synced_at: "2026-09-23T11:45:00-03:00"
 
