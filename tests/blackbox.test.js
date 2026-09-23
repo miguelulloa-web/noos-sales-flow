@@ -43,6 +43,7 @@ function startServerProcess(port, dbPath) {
       PORT: String(port),
       HOST: '127.0.0.1',
       DB_PATH: dbPath,
+      DB_DIR: path.dirname(dbPath),
       NODE_ENV: 'test',
       ALLOWED_ORIGINS: `http://localhost:${port},http://127.0.0.1:${port}`
     },

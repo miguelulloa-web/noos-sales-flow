@@ -842,6 +842,12 @@ export function createApp(options = {}) {
           code: 'DRAFT_STALE'
         });
       }
+      if (err.code === 'DRAFT_DISCARDED') {
+        return res.status(409).json({
+          error: 'No se puede editar un borrador descartado (DISCARDED)',
+          code: 'DRAFT_DISCARDED'
+        });
+      }
       return res.status(500).json({ error: err.message, code: 'UPDATE_FAILED' });
     }
   });
@@ -870,6 +876,18 @@ export function createApp(options = {}) {
         return res.status(409).json({
           error: 'Borrador desactualizado (STALE) no puede ser copiado',
           code: 'DRAFT_STALE'
+        });
+      }
+      if (err.code === 'DRAFT_DISCARDED') {
+        return res.status(409).json({
+          error: 'No se puede copiar un borrador descartado (DISCARDED)',
+          code: 'DRAFT_DISCARDED'
+        });
+      }
+      if (err.code === 'DRAFT_NOT_CURRENT') {
+        return res.status(409).json({
+          error: err.message,
+          code: 'DRAFT_NOT_CURRENT'
         });
       }
       return res.status(500).json({ error: err.message, code: 'AUTHORIZATION_FAILED' });
@@ -902,6 +920,18 @@ export function createApp(options = {}) {
           code: 'DRAFT_STALE'
         });
       }
+      if (err.code === 'DRAFT_DISCARDED') {
+        return res.status(409).json({
+          error: 'No se puede copiar un borrador descartado (DISCARDED)',
+          code: 'DRAFT_DISCARDED'
+        });
+      }
+      if (err.code === 'DRAFT_NOT_CURRENT') {
+        return res.status(409).json({
+          error: err.message,
+          code: 'DRAFT_NOT_CURRENT'
+        });
+      }
       return res.status(500).json({ error: err.message, code: 'COPY_FAILED' });
     }
   };
@@ -920,6 +950,14 @@ export function createApp(options = {}) {
 
   // Controlled Synthetic Demo Data Administration (MVP-13)
   app.post('/api/admin/reset-demo-data', requireAuth, requireRole('ADMIN'), (req, res) => {
+    const { confirmation } = req.body || {};
+    if (confirmation !== 'RESET_SYNTHETIC_DEMO_DATA') {
+      return res.status(400).json({
+        error: 'Se requiere confirmación explícita (confirmation: "RESET_SYNTHETIC_DEMO_DATA") para restablecer datos sintéticos.',
+        code: 'CONFIRMATION_REQUIRED'
+      });
+    }
+
     try {
       const result = resetSyntheticDemoData(req.user.id, getDb());
       const summary = getOperationalSummary(getDb());
@@ -967,21 +1005,6 @@ export function createApp(options = {}) {
         editedText: draft_text.trim(),
         status: 'EDITED',
         reviewedByUserId: req.user.id
-      });
-
-      appendAuditLog({
-        leadId,
-        eventType: 'DRAFT_CREATED_MANUAL',
-        entityType: 'DRAFT',
-        entityId: draft.id,
-        actorUserId: req.user.id,
-        newState: {
-          id: draft.id,
-          lead_id: leadId,
-          facts_version: currentFacts.version,
-          status: 'EDITED',
-          source: 'MANUAL_OPERATOR'
-        }
       });
 
       return res.status(201).json({ draft });

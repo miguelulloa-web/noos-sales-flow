@@ -19,7 +19,10 @@ import {
   createLeadAction,
   getOperationalSummary,
   resetSyntheticDemoData,
-  createSession
+  createSession,
+  getLeadById,
+  getDraftById,
+  listLeadsWithTriageSummary
 } from '../src/db.js';
 import { hashPassword, generateSessionToken, hashSessionToken } from '../src/auth.js';
 
@@ -271,7 +274,7 @@ test('TP-05: 2. GET /api/operational-summary requiere autenticación y responde 
   assert.equal(typeof body.avgAiLatencyMs, 'number');
 });
 
-test('TP-05: 3. POST /api/admin/reset-demo-data: rol ADMIN exclusivo y diálogo de confirmación en servidor', async () => {
+test('TP-05: 3. POST /api/admin/reset-demo-data: rol ADMIN exclusivo y contrato estricto de confirmación en servidor', async () => {
   const { db } = setupTestEnv();
   const app = createApp();
 
@@ -289,18 +292,16 @@ test('TP-05: 3. POST /api/admin/reset-demo-data: rol ADMIN exclusivo y diálogo 
     role: 'ADMIN'
   }, db);
 
-  // 1. Session for operator
+  // 1. Session for operator -> 403 Forbidden
   const opToken = generateSessionToken();
   const opTokenHash = hashSessionToken(opToken);
   createSession({ userId: operatorUser.id, sessionTokenHash: opTokenHash }, db);
 
-  // Operator receives 403 Forbidden
   const opRes = await invokeApp(app, {
     method: 'POST',
     url: '/api/admin/reset-demo-data',
-    headers: {
-      'cookie': `noos_session=${opToken}`
-    }
+    headers: { 'cookie': `noos_session=${opToken}` },
+    body: { confirmation: 'RESET_SYNTHETIC_DEMO_DATA' }
   });
   assert.equal(opRes.status, 403, 'Operator must receive 403 Forbidden');
 
@@ -309,13 +310,35 @@ test('TP-05: 3. POST /api/admin/reset-demo-data: rol ADMIN exclusivo y diálogo 
   const adminTokenHash = hashSessionToken(adminToken);
   createSession({ userId: adminUser.id, sessionTokenHash: adminTokenHash }, db);
 
-  // Admin receives 200 OK and resets synthetic data
+  // 3. Admin sin cuerpo o sin confirmación -> 400 CONFIRMATION_REQUIRED y NO altera la base
+  const noConfirmRes = await invokeApp(app, {
+    method: 'POST',
+    url: '/api/admin/reset-demo-data',
+    headers: { 'cookie': `noos_session=${adminToken}` },
+    body: {}
+  });
+  assert.equal(noConfirmRes.status, 400);
+  assert.equal(noConfirmRes.body.code, 'CONFIRMATION_REQUIRED');
+
+  // 4. Admin con confirmación errónea -> 400 CONFIRMATION_REQUIRED y NO altera la base
+  const wrongConfirmRes = await invokeApp(app, {
+    method: 'POST',
+    url: '/api/admin/reset-demo-data',
+    headers: { 'cookie': `noos_session=${adminToken}` },
+    body: { confirmation: 'RESET_ALL' }
+  });
+  assert.equal(wrongConfirmRes.status, 400);
+  assert.equal(wrongConfirmRes.body.code, 'CONFIRMATION_REQUIRED');
+
+  const leadsCountBefore = db.prepare('SELECT COUNT(*) as c FROM leads').get().c;
+  assert.equal(leadsCountBefore, 0, 'No debe haberse creado ni mutado ningún lead tras 400');
+
+  // 5. Admin con confirmación exacta -> 200 OK y restablece exactamente 3 sintéticos
   const adminRes = await invokeApp(app, {
     method: 'POST',
     url: '/api/admin/reset-demo-data',
-    headers: {
-      'cookie': `noos_session=${adminToken}`
-    }
+    headers: { 'cookie': `noos_session=${adminToken}` },
+    body: { confirmation: 'RESET_SYNTHETIC_DEMO_DATA' }
   });
   assert.equal(adminRes.status, 200);
   const adminJson = adminRes.body;
@@ -323,13 +346,296 @@ test('TP-05: 3. POST /api/admin/reset-demo-data: rol ADMIN exclusivo y diálogo 
   assert.equal(adminJson.result.count, 3);
   assert.equal(adminJson.summary.totalLeads, 3);
 
-  // Verify audit log has DEMO_DATA_RESET
+  // Verificar que los leads creados tienen source = 'SYNTHETIC_DEMO'
+  const syntheticLeads = db.prepare("SELECT * FROM leads WHERE source = 'SYNTHETIC_DEMO'").all();
+  assert.equal(syntheticLeads.length, 3);
+
+  // Verificar que el log de auditoría registra DEMO_DATA_RESET con actorUserId y sin secretos
   const auditLogs = db.prepare("SELECT * FROM audit_log WHERE event_type = 'DEMO_DATA_RESET'").all();
   assert.equal(auditLogs.length, 1);
   assert.equal(auditLogs[0].actor_user_id, adminUser.id);
+  const auditState = JSON.parse(auditLogs[0].new_state_json);
+  assert.equal(auditState.createdCount, 3);
 });
 
-test('TP-05: 4. Continuidad manual (MVP-11): creación de borrador manual sin Gemini ante contingencia de IA', async () => {
+test('TP-05: 4. Preservación absoluta de solicitudes reales (MANUAL) e idempotencia del reset sintético', async () => {
+  const { db } = setupTestEnv();
+  const app = createApp();
+
+  const admin = createUser({
+    name: 'Admin Custodio',
+    email: 'admin-custodio@noosadvisory.com',
+    passwordHash: 'hash',
+    role: 'ADMIN'
+  }, db);
+
+  const operator = createUser({
+    name: 'Operador Real',
+    email: 'op-real@noosadvisory.com',
+    passwordHash: 'hash',
+    role: 'OPERATOR'
+  }, db);
+
+  // Inyectar una solicitud comercial REAL (source = 'MANUAL') con ciclo de vida completo
+  const realLead = createLead({
+    idempotencyKey: 'real-manual-lead-001',
+    textHash: 'hash-real-001',
+    rawText: 'Solicitud real de prueba de cliente corporativo legítimo.',
+    source: 'MANUAL',
+    senderName: 'Carlos Mendizábal',
+    companyName: 'Minera del Norte S.A.',
+    senderEmail: 'cmendizabal@mineranorte.cl',
+    status: 'CONFIRMED',
+    createdByUserId: operator.id
+  }, db);
+
+  const realExt = createLeadExtraction({
+    leadId: realLead.id,
+    modelIdentifier: 'gemini-3.6-flash',
+    promptVersion: '1.0.0',
+    schemaVersion: '1.0.0',
+    rawResponseJson: '{}',
+    structuredOutputJson: '{}',
+    isCommercial: 1,
+    confidenceScore: 'HIGH',
+    requestType: 'QUOTE',
+    scopeSummary: 'Auditoría comercial de contratos mineros',
+    urgency: 'HIGH',
+    suggestedResponseDraft: 'Estimado Carlos...',
+    latencyMs: 950,
+    retryCount: 0,
+    status: 'SUCCESS'
+  }, db);
+
+  const realFacts = saveConfirmedFacts({
+    leadId: realLead.id,
+    version: 1,
+    contactName: 'Carlos Mendizábal',
+    companyName: 'Minera del Norte S.A.',
+    contactEmail: 'cmendizabal@mineranorte.cl',
+    requestType: 'QUOTE',
+    scopeSummary: 'Auditoría comercial de contratos mineros confirmada',
+    urgency: 'HIGH',
+    confirmedByUserId: operator.id
+  }, db);
+
+  const realDraft = saveResponseDraft({
+    leadId: realLead.id,
+    confirmedFactsVersion: 1,
+    modelIdentifier: 'gemini-3.6-flash',
+    promptVersion: '1.0.0',
+    initialDraftText: 'Estimado Carlos, adjunto propuesta técnica preliminar...',
+    status: 'GENERATED',
+    reviewedByUserId: operator.id
+  }, db);
+
+  const tomorrow = new Date(Date.now() + 86400000).toISOString();
+  const realAction = createLeadAction({
+    leadId: realLead.id,
+    assignedUserId: operator.id,
+    actionType: 'SEND_QUOTE',
+    description: 'Enviar cotización formal aprobada a Carlos Mendizábal',
+    dueDate: tomorrow
+  }, db);
+
+  // Comprobar estado antes del reset
+  assert.equal(getLeadById(realLead.id, db).source, 'MANUAL');
+
+  // Ejecutar el primer reset de datos sintéticos
+  const reset1 = resetSyntheticDemoData(admin.id, db);
+  assert.equal(reset1.success, true);
+  assert.equal(reset1.count, 3);
+
+  // VERIFICACIÓN CRÍTICA: El lead real MANUAL debe permanecer 100% INTACTO
+  const leadAfterReset1 = getLeadById(realLead.id, db);
+  assert.ok(leadAfterReset1, 'El lead real MANUAL DEBE SOBREVIVIR al reset');
+  assert.equal(leadAfterReset1.id, realLead.id);
+  assert.equal(leadAfterReset1.source, 'MANUAL');
+  assert.equal(leadAfterReset1.company_name, 'Minera del Norte S.A.');
+  assert.equal(leadAfterReset1.sender_name, 'Carlos Mendizábal');
+  assert.equal(leadAfterReset1.status, 'CONFIRMED');
+
+  // Verificar que todos los registros dependientes del lead real sobreviven
+  const extCheck = db.prepare('SELECT * FROM lead_extractions WHERE lead_id = ?').get(realLead.id);
+  assert.ok(extCheck, 'La extracción del lead real debe conservarse');
+  assert.equal(extCheck.id, realExt.id);
+
+  const factsCheck = db.prepare('SELECT * FROM lead_confirmed_facts WHERE lead_id = ?').get(realLead.id);
+  assert.ok(factsCheck, 'Los hechos confirmados del lead real deben conservarse');
+  assert.equal(factsCheck.id, realFacts.confirmedFacts.id);
+
+  const draftCheck = db.prepare('SELECT * FROM response_drafts WHERE lead_id = ?').get(realLead.id);
+  assert.ok(draftCheck, 'El borrador del lead real debe conservarse');
+  assert.equal(draftCheck.id, realDraft.id);
+
+  const actionCheck = db.prepare('SELECT * FROM lead_actions WHERE lead_id = ?').get(realLead.id);
+  assert.ok(actionCheck, 'La acción comercial del lead real debe conservarse');
+  assert.equal(actionCheck.id, realAction.id);
+
+  // Total de leads en la base: 3 sintéticos + 1 real = 4
+  const summary1 = getOperationalSummary(db);
+  assert.equal(summary1.totalLeads, 4);
+
+  // Ejecutar un SEGUNDO reset consecutivo para probar IDEMPOTENCIA
+  const reset2 = resetSyntheticDemoData(admin.id, db);
+  assert.equal(reset2.success, true);
+  assert.equal(reset2.deletedCount, 3, 'Debe haber eliminado exclusivamente los 3 sintéticos del reset anterior');
+  assert.equal(reset2.count, 3);
+
+  // El lead real sigue intacto
+  const leadAfterReset2 = getLeadById(realLead.id, db);
+  assert.ok(leadAfterReset2, 'El lead real MANUAL DEBE SEGUIR INTACTO tras segundo reset');
+  assert.equal(leadAfterReset2.source, 'MANUAL');
+
+  const summary2 = getOperationalSummary(db);
+  assert.equal(summary2.totalLeads, 4);
+});
+
+test('TP-05: 5. Ciclo de vida estricto de borradores: reemplazo manual invalida a DISCARDED, persiste edited_text y bloquea copia', async () => {
+  const { db } = setupTestEnv();
+  const app = createApp();
+
+  const user = createUser({
+    name: 'Operador Triage',
+    email: 'triage@noosadvisory.com',
+    passwordHash: 'hash',
+    role: 'OPERATOR'
+  }, db);
+
+  const token = generateSessionToken();
+  createSession({ userId: user.id, sessionTokenHash: hashSessionToken(token) }, db);
+
+  const lead = createLead({
+    idempotencyKey: 'idemp-draft-lifecycle',
+    textHash: 'hash-draft-lifecycle',
+    rawText: 'Solicitud con múltiples versiones de borrador',
+    status: 'CONFIRMED',
+    createdByUserId: user.id
+  }, db);
+
+  saveConfirmedFacts({
+    leadId: lead.id,
+    version: 1,
+    contactName: 'Lorena Peña',
+    companyName: 'Distribuidora Central SpA',
+    requestType: 'QUOTE',
+    scopeSummary: 'Cotización de optimización de rutas',
+    urgency: 'HIGH',
+    confirmedByUserId: user.id
+  }, db);
+
+  // 1. Crear primer borrador (simulando IA o inicial)
+  const draft1 = saveResponseDraft({
+    leadId: lead.id,
+    confirmedFactsVersion: 1,
+    modelIdentifier: 'gemini-3.6-flash',
+    initialDraftText: 'Estimada Lorena, borrador versión 1...',
+    status: 'GENERATED',
+    reviewedByUserId: user.id
+  }, db);
+
+  assert.equal(draft1.status, 'GENERATED');
+
+  // 2. Crear reemplazo manual vía API POST /api/leads/:id/drafts/manual
+  const manualRes = await invokeApp(app, {
+    method: 'POST',
+    url: `/api/leads/${lead.id}/drafts/manual`,
+    headers: { 'cookie': `noos_session=${token}` },
+    body: { draft_text: 'Estimada Lorena, propuesta de redacción manual definitiva y personalizada.' }
+  });
+
+  assert.equal(manualRes.status, 201);
+  const draft2 = manualRes.body.draft;
+  assert.equal(draft2.status, 'EDITED');
+  assert.equal(draft2.model_identifier, 'MANUAL_OPERATOR');
+  // edited_text DEBE persistirse coherentemente y no ser null
+  assert.equal(draft2.edited_text, 'Estimada Lorena, propuesta de redacción manual definitiva y personalizada.');
+
+  // 3. VERIFICAR QUE EL BORRADOR ANTERIOR (draft1) FUE INVALIDADO A DISCARDED
+  const draft1Reloaded = getDraftById(draft1.id, db);
+  assert.equal(draft1Reloaded.status, 'DISCARDED', 'El borrador anterior debe quedar en estado DISCARDED');
+
+  // Verificar auditoría de invalidación DRAFT_DISCARDED
+  const discardAudit = db.prepare("SELECT * FROM audit_log WHERE event_type = 'DRAFT_DISCARDED' AND entity_id = ?").get(draft1.id);
+  assert.ok(discardAudit, 'Debe registrarse evento DRAFT_DISCARDED en auditoría');
+  const discardNewState = JSON.parse(discardAudit.new_state_json);
+  assert.equal(discardNewState.status, 'DISCARDED');
+  assert.equal(discardNewState.superseded_by_draft_id, draft2.id);
+
+  // 4. VERIFICAR QUE copy-authorize RECHAZA EL BORRADOR DISCARDED CON 409
+  const authDiscardedRes = await invokeApp(app, {
+    method: 'POST',
+    url: `/api/leads/${lead.id}/drafts/${draft1.id}/copy-authorize`,
+    headers: { 'cookie': `noos_session=${token}` }
+  });
+  assert.equal(authDiscardedRes.status, 409);
+  assert.equal(authDiscardedRes.body.code, 'DRAFT_DISCARDED');
+
+  // 5. VERIFICAR QUE copy-confirm TAMBIÉN RECHAZA EL BORRADOR DISCARDED CON 409
+  const confirmDiscardedRes = await invokeApp(app, {
+    method: 'POST',
+    url: `/api/leads/${lead.id}/drafts/${draft1.id}/copy-confirm`,
+    headers: { 'cookie': `noos_session=${token}` }
+  });
+  assert.equal(confirmDiscardedRes.status, 409);
+  assert.equal(confirmDiscardedRes.body.code, 'DRAFT_DISCARDED');
+
+  // 6. VERIFICAR QUE PATCH RECHAZA EL BORRADOR DISCARDED CON 409
+  const patchDiscardedRes = await invokeApp(app, {
+    method: 'PATCH',
+    url: `/api/leads/${lead.id}/drafts/${draft1.id}`,
+    headers: { 'cookie': `noos_session=${token}` },
+    body: { edited_text: 'Intento de modificar borrador descartado' }
+  });
+  assert.equal(patchDiscardedRes.status, 409);
+  assert.equal(patchDiscardedRes.body.code, 'DRAFT_DISCARDED');
+
+  // 7. VERIFICAR QUE copy-authorize EN EL BORRADOR VIGENTE (draft2) ES EXITOSO (200 OK)
+  const authCurrentRes = await invokeApp(app, {
+    method: 'POST',
+    url: `/api/leads/${lead.id}/drafts/${draft2.id}/copy-authorize`,
+    headers: { 'cookie': `noos_session=${token}` }
+  });
+  assert.equal(authCurrentRes.status, 200);
+  assert.equal(authCurrentRes.body.authorized, true);
+
+  // 8. VERIFICAR QUE EXISTE EXACTAMENTE UN BORRADOR ACTIVO PARA EL LEAD
+  const activeDrafts = db.prepare("SELECT * FROM response_drafts WHERE lead_id = ? AND status IN ('GENERATED', 'EDITED')").all(lead.id);
+  assert.equal(activeDrafts.length, 1);
+  assert.equal(activeDrafts[0].id, draft2.id);
+});
+
+test('TP-05: 6. Atomicidad y reversión transaccional ante fallos intermedios', () => {
+  const { db } = setupTestEnv();
+
+  const user = createUser({
+    name: 'Admin Transaccional',
+    email: 'admin-tx@noosadvisory.com',
+    passwordHash: 'hash',
+    role: 'ADMIN'
+  }, db);
+
+  const initialSummary = getOperationalSummary(db);
+
+  // Intentar crear un borrador manual con facts_version incompatible en saveResponseDraft
+  // Simular fallo forzando error dentro de la transacción
+  assert.throws(() => {
+    saveResponseDraft({
+      leadId: 'inexistent-lead-id',
+      confirmedFactsVersion: 999,
+      modelIdentifier: 'MANUAL_OPERATOR',
+      initialDraftText: 'Borrador que debe revertirse',
+      status: 'EDITED'
+    }, db);
+  });
+
+  // Verificar que la base de datos se mantiene completamente consistente
+  const finalSummary = getOperationalSummary(db);
+  assert.equal(finalSummary.totalDrafts, initialSummary.totalDrafts);
+  assert.equal(finalSummary.totalLeads, initialSummary.totalLeads);
+});
+
+test('TP-05: 7. Continuidad manual (MVP-11): validación de prerrequisito de hechos confirmados', async () => {
   const { db } = setupTestEnv();
   const app = createApp();
 
@@ -389,13 +695,14 @@ test('TP-05: 4. Continuidad manual (MVP-11): creación de borrador manual sin Ge
   assert.equal(successRes.body.draft.model_identifier, 'MANUAL_OPERATOR');
   assert.equal(successRes.body.draft.status, 'EDITED');
   assert.equal(successRes.body.draft.confirmed_facts_version, 1);
+  assert.equal(successRes.body.draft.edited_text, 'Estimada Mariana, gracias por contactar a NoosAdvisory...');
 
   // Verify audit log has DRAFT_CREATED_MANUAL
   const auditDraft = db.prepare("SELECT * FROM audit_log WHERE event_type = 'DRAFT_CREATED_MANUAL'").all();
   assert.equal(auditDraft.length, 1);
 });
 
-test('TP-05: 5. Persistencia y recuperación completa de datos tras cierre y reconexión de SQLite', () => {
+test('TP-05: 8. Persistencia y recuperación completa de datos tras cierre y reconexión de SQLite', () => {
   const { dbPath } = setupTestEnv();
 
   // Open first DB connection and insert data

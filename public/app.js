@@ -8,6 +8,7 @@ import { executeDraftCopy } from './clipboard_workflow.js';
   let leadsCache = [];
   let currentFilter = '';
   let operatorsList = [];
+  let isCreatingNewManualDraft = false;
 
   // DOM Elements - Auth & Header
   const loginModal = document.getElementById('loginModal');
@@ -408,6 +409,7 @@ import { executeDraftCopy } from './clipboard_workflow.js';
   // Selecting a lead and loading detail
   async function selectLead(leadId) {
     activeLeadId = leadId;
+    isCreatingNewManualDraft = false;
     renderLeadsList();
 
     emptyDetailState.style.display = 'none';
@@ -886,7 +888,22 @@ import { executeDraftCopy } from './clipboard_workflow.js';
       return;
     }
 
-    if (activeLeadData?.current_draft) {
+    if (isCreatingNewManualDraft || !activeLeadData?.current_draft) {
+      // Manual creation without AI (MVP-11)
+      const res = await apiRequest(`/api/leads/${activeLeadId}/drafts/manual`, {
+        method: 'POST',
+        body: JSON.stringify({ draft_text: editedText })
+      });
+
+      if (res.ok && res.data?.draft) {
+        isCreatingNewManualDraft = false;
+        showToast('Borrador manual creado con éxito');
+        await selectLead(activeLeadId);
+        await fetchOperationalSummary();
+      } else {
+        showToast(`Error al crear borrador: ${res.data?.error || 'Desconocido'}`);
+      }
+    } else {
       const draftId = activeLeadData.current_draft.id;
       const res = await apiRequest(`/api/leads/${activeLeadId}/drafts/${draftId}`, {
         method: 'PATCH',
@@ -900,20 +917,6 @@ import { executeDraftCopy } from './clipboard_workflow.js';
       } else {
         showToast(`Error al guardar edición: ${res.data?.error || 'Desconocido'}`);
       }
-    } else {
-      // Manual creation without AI (MVP-11)
-      const res = await apiRequest(`/api/leads/${activeLeadId}/drafts/manual`, {
-        method: 'POST',
-        body: JSON.stringify({ draft_text: editedText })
-      });
-
-      if (res.ok && res.data?.draft) {
-        showToast('Borrador manual creado con éxito');
-        await selectLead(activeLeadId);
-        await fetchOperationalSummary();
-      } else {
-        showToast(`Error al crear borrador: ${res.data?.error || 'Desconocido'}`);
-      }
     }
   });
 
@@ -924,6 +927,7 @@ import { executeDraftCopy } from './clipboard_workflow.js';
         showToast('Debe confirmar los hechos del lead antes de redactar un borrador.');
         return;
       }
+      isCreatingNewManualDraft = true;
       draftTextarea.disabled = false;
       draftTextarea.value = '';
       draftTextarea.placeholder = 'Redacte aquí la propuesta o respuesta comercial formal...';
@@ -1021,7 +1025,8 @@ import { executeDraftCopy } from './clipboard_workflow.js';
       btnConfirmResetDemo.textContent = 'Restableciendo...';
       try {
         const res = await apiRequest('/api/admin/reset-demo-data', {
-          method: 'POST'
+          method: 'POST',
+          body: JSON.stringify({ confirmation: 'RESET_SYNTHETIC_DEMO_DATA' })
         });
         if (res.ok) {
           showToast('Catálogo de prueba restablecido con éxito');

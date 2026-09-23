@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import assert from 'node:assert/strict';
 import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
@@ -289,27 +290,64 @@ async function runEndToEndVerification() {
   }
   results.summary = summaryRes.body;
 
-  // Escenario 16: Control de Roles para Administración de Datos Sintéticos (MVP-13)
-  console.log('\n[E2E 8/7] Probando control de rol ADMIN para restablecer datos sintéticos...');
+  // Escenario 16: Control de Roles y Confirmación en Servidor para Administración de Datos Sintéticos (MVP-13)
+  console.log('\n[E2E 8/7] Probando control de rol ADMIN y confirmación obligatoria para restablecer datos sintéticos...');
   const forbiddenReset = await invokeApp(app, {
     method: 'POST',
     url: '/api/admin/reset-demo-data',
-    headers: { cookie: opCookie }
+    headers: { cookie: opCookie },
+    body: { confirmation: 'RESET_SYNTHETIC_DEMO_DATA' }
   });
   console.log(` -> Operador reseteo HTTP (esperado 403): ${forbiddenReset.status}`);
   if (forbiddenReset.status !== 403) {
     throw new Error('Operador no fue bloqueado con 403 al intentar resetear datos');
   }
 
+  // Admin sin confirmación en el cuerpo -> 400 CONFIRMATION_REQUIRED
+  const missingConfirmReset = await invokeApp(app, {
+    method: 'POST',
+    url: '/api/admin/reset-demo-data',
+    headers: { cookie: adminCookie },
+    body: {}
+  });
+  console.log(` -> Admin reseteo sin confirmación HTTP (esperado 400): ${missingConfirmReset.status}`);
+  if (missingConfirmReset.status !== 400 || missingConfirmReset.body.code !== 'CONFIRMATION_REQUIRED') {
+    throw new Error('Admin sin confirmación no fue rechazado con 400 CONFIRMATION_REQUIRED');
+  }
+
+  // Admin con confirmación errónea -> 400 CONFIRMATION_REQUIRED
+  const wrongConfirmReset = await invokeApp(app, {
+    method: 'POST',
+    url: '/api/admin/reset-demo-data',
+    headers: { cookie: adminCookie },
+    body: { confirmation: 'INCORRECT_CONFIRMATION' }
+  });
+  console.log(` -> Admin reseteo confirmación inválida HTTP (esperado 400): ${wrongConfirmReset.status}`);
+  if (wrongConfirmReset.status !== 400 || wrongConfirmReset.body.code !== 'CONFIRMATION_REQUIRED') {
+    throw new Error('Admin con confirmación errónea no fue rechazado con 400 CONFIRMATION_REQUIRED');
+  }
+
+  // Admin con confirmación exacta -> 200 OK
   const allowedReset = await invokeApp(app, {
     method: 'POST',
     url: '/api/admin/reset-demo-data',
-    headers: { cookie: adminCookie }
+    headers: { cookie: adminCookie },
+    body: { confirmation: 'RESET_SYNTHETIC_DEMO_DATA' }
   });
-  console.log(` -> Admin reseteo HTTP (esperado 200): ${allowedReset.status}, Count: ${allowedReset.body.result?.count}`);
+  console.log(` -> Admin reseteo HTTP (esperado 200): ${allowedReset.status}, Count Creados: ${allowedReset.body.result?.count}`);
   if (allowedReset.status !== 200 || allowedReset.body.result?.count !== 3) {
     throw new Error('Admin no pudo restablecer datos sintéticos correctamente');
   }
+
+  // Verificación crítica: El lead real MANUAL debe haber sobrevivido intacto con todos sus registros dependientes
+  const realLeadAfterReset = getLeadById(createdLead.id, db);
+  if (!realLeadAfterReset) {
+    throw new Error('FALLO CRÍTICO: El lead real MANUAL fue eliminado durante el reset de datos sintéticos!');
+  }
+  assert.equal(realLeadAfterReset.id, createdLead.id);
+  assert.equal(realLeadAfterReset.source, 'MANUAL');
+  assert.equal(realLeadAfterReset.status, 'RESPONDED');
+  console.log(` -> Preservación de Lead Real MANUAL: ID=${realLeadAfterReset.id}, Status=${realLeadAfterReset.status} (SOBREVIVIÓ INTACTO)`);
   results.adminReset = 'PASS';
 
   // Escenario 15: Persistencia tras reinicio de base de datos
@@ -319,8 +357,13 @@ async function runEndToEndVerification() {
   initSchema(dbReopened);
   const summaryReopened = getOperationalSummary(dbReopened);
   console.log(` -> Conteo tras reconexión: totalLeads=${summaryReopened.totalLeads}, openActions=${summaryReopened.openActions}`);
-  if (summaryReopened.totalLeads !== 3) {
-    throw new Error('Persistencia tras reinicio no conservó los 3 leads sintéticos');
+  // Debe contener los 3 sintéticos más el lead real MANUAL = 4 leads
+  if (summaryReopened.totalLeads < 4) {
+    throw new Error(`Persistencia tras reinicio no conservó los leads esperados (esperado >= 4, obtenido ${summaryReopened.totalLeads})`);
+  }
+  const realLeadReopened = getLeadById(createdLead.id, dbReopened);
+  if (!realLeadReopened) {
+    throw new Error('FALLO CRÍTICO: El lead real no se persistió tras reconexión!');
   }
   results.persistence = 'PASS';
   closeDb();

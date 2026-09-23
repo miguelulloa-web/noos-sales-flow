@@ -788,6 +788,7 @@ export function saveResponseDraft({
   modelIdentifier,
   promptVersion = '1.0.0',
   initialDraftText,
+  editedText = null,
   status = 'GENERATED',
   reviewedByUserId = null
 }, db = getDb()) {
@@ -839,23 +840,59 @@ export function saveResponseDraft({
       throw err;
     }
 
+    // 2. Transactionally invalidate previous active drafts for this lead to maintain exactly one current active draft
+    if (status === 'GENERATED' || status === 'EDITED') {
+      const activeDrafts = db.prepare(`
+        SELECT * FROM response_drafts
+        WHERE lead_id = ? AND status IN ('GENERATED', 'EDITED')
+      `).all(leadId);
+
+      for (const prev of activeDrafts) {
+        db.prepare(`
+          UPDATE response_drafts
+          SET status = 'DISCARDED', updated_at = ?
+          WHERE id = ?
+        `).run(now, prev.id);
+
+        appendAuditLog({
+          leadId,
+          eventType: 'DRAFT_DISCARDED',
+          entityType: 'response_drafts',
+          entityId: prev.id,
+          previousState: prev,
+          newState: {
+            id: prev.id,
+            status: 'DISCARDED',
+            updated_at: now,
+            superseded_by_draft_id: id
+          },
+          actorUserId: reviewedByUserId || 'SYSTEM'
+        }, db);
+      }
+    }
+
+    // 3. Resolve persistent edited_text: if status is EDITED, persist coherent edited_text
+    const finalEditedText = status === 'EDITED'
+      ? (editedText !== undefined && editedText !== null ? editedText : initialDraftText)
+      : (editedText || null);
+
     db.prepare(`
       INSERT INTO response_drafts (
         id, lead_id, confirmed_facts_version, model_identifier, prompt_version,
         initial_draft_text, edited_text, status, reviewed_by_user_id,
         created_at, updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id, leadId, confirmedFactsVersion, modelIdentifier, promptVersion,
-      initialDraftText, status, reviewedByUserId, now, now
+      initialDraftText, finalEditedText, status, reviewedByUserId, now, now
     );
 
     draft = getDraftById(id, db);
 
     appendAuditLog({
       leadId,
-      eventType: 'DRAFT_GENERATED',
+      eventType: status === 'EDITED' ? 'DRAFT_CREATED_MANUAL' : 'DRAFT_GENERATED',
       entityType: 'response_drafts',
       entityId: id,
       previousState: null,
@@ -920,6 +957,11 @@ export function updateResponseDraft({ draftId, leadId = null, editedText, review
     err.code = 'DRAFT_STALE';
     throw err;
   }
+  if (current.status === 'DISCARDED') {
+    const err = new Error('No se puede editar un borrador descartado (DISCARDED)');
+    err.code = 'DRAFT_DISCARDED';
+    throw err;
+  }
 
   const now = new Date().toISOString();
   db.prepare(`
@@ -958,6 +1000,18 @@ export function validateDraftForCopy({ draftId, leadId = null }, db = getDb()) {
   if (current.status === 'STALE') {
     const err = new Error('No se puede copiar un borrador en estado STALE');
     err.code = 'DRAFT_STALE';
+    throw err;
+  }
+  if (current.status === 'DISCARDED') {
+    const err = new Error('No se puede copiar un borrador descartado (DISCARDED)');
+    err.code = 'DRAFT_DISCARDED';
+    throw err;
+  }
+  // Ensure only the latest / vigente draft for this lead can be copied
+  const latestDraft = getLatestDraftByLeadId(current.lead_id, db);
+  if (latestDraft && latestDraft.id !== current.id) {
+    const err = new Error('Solo el borrador vigente más reciente puede ser copiado');
+    err.code = 'DRAFT_NOT_CURRENT';
     throw err;
   }
   return current;
@@ -1927,11 +1981,26 @@ export function resetSyntheticDemoData(adminUserId, db = getDb()) {
   const now = new Date();
   const nowIso = now.toISOString();
 
-  runInTransaction(db, () => {
-    // 1. Delete existing leads (child records cascade delete via foreign keys)
-    db.prepare('DELETE FROM leads').run();
+  let result = null;
 
-    // 2. Insert clean synthetic demo dataset
+  runInTransaction(db, () => {
+    // 1. Identify exclusively synthetic demo leads:
+    // By durable marker source = 'SYNTHETIC_DEMO', plus backwards compatibility for known exact demo idempotency keys
+    const existingSynthetic = db.prepare(`
+      SELECT id FROM leads
+      WHERE source = 'SYNTHETIC_DEMO'
+         OR idempotency_key IN ('demo-idemp-001', 'demo-idemp-002', 'demo-idemp-003')
+    `).all();
+
+    const deletedLeadIds = existingSynthetic.map(l => l.id);
+
+    // Delete exclusively synthetic demo leads (child records cascade delete via foreign keys)
+    if (deletedLeadIds.length > 0) {
+      const placeholders = deletedLeadIds.map(() => '?').join(',');
+      db.prepare(`DELETE FROM leads WHERE id IN (${placeholders})`).run(...deletedLeadIds);
+    }
+
+    // 2. Insert clean synthetic demo dataset with source = 'SYNTHETIC_DEMO'
     // Synthetic Lead 1: Solicitud Nueva en Revisión
     const text1 = 'Hola equipo NoosAdvisory, les contacto desde Forestal del Sur SpA. Estamos buscando asesoría para optimizar nuestros flujos de licitación pública y procesos de compliance tributario. Necesitamos una cotización de alcance y plazos para presentar al directorio la próxima semana. Contacto: Rodrigo Morales, rmorales@forestaldelsur.cl, +56 9 8877 6655.';
     const hash1 = crypto.createHash('sha256').update(text1).digest('hex');
@@ -1941,7 +2010,7 @@ export function resetSyntheticDemoData(adminUserId, db = getDb()) {
         id, idempotency_key, text_hash, raw_text, source, status,
         is_possible_duplicate, duplicate_of_lead_id, sender_name, sender_email,
         company_name, created_by_user_id, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, 'MANUAL', 'IN_REVIEW', 0, NULL, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, 'SYNTHETIC_DEMO', 'IN_REVIEW', 0, NULL, ?, ?, ?, ?, ?, ?)
     `).run(
       lead1Id,
       'demo-idemp-001',
@@ -1974,7 +2043,7 @@ export function resetSyntheticDemoData(adminUserId, db = getDb()) {
         id, idempotency_key, text_hash, raw_text, source, status,
         is_possible_duplicate, duplicate_of_lead_id, sender_name, sender_email,
         company_name, created_by_user_id, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, 'MANUAL', 'RESPONDED', 0, NULL, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, 'SYNTHETIC_DEMO', 'RESPONDED', 0, NULL, ?, ?, ?, ?, ?, ?)
     `).run(
       lead2Id,
       'demo-idemp-002',
@@ -2013,7 +2082,7 @@ export function resetSyntheticDemoData(adminUserId, db = getDb()) {
         id, idempotency_key, text_hash, raw_text, source, status,
         is_possible_duplicate, duplicate_of_lead_id, sender_name, sender_email,
         company_name, created_by_user_id, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, 'MANUAL', 'CONFIRMED', 0, NULL, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, 'SYNTHETIC_DEMO', 'CONFIRMED', 0, NULL, ?, ?, ?, ?, ?, ?)
     `).run(
       lead3Id,
       'demo-idemp-003',
@@ -2043,16 +2112,34 @@ export function resetSyntheticDemoData(adminUserId, db = getDb()) {
       ) VALUES (?, ?, ?, 'SEND_QUOTE', 'Enviar propuesta técnica y cotización formal de revisión contractual', ?, 'PENDING', ?, ?)
     `).run(action3Id, lead3Id, adminUserId, tomorrowIso, nowIso, nowIso);
 
-    // Audit the reset
+    const createdLeadIds = [lead1Id, lead2Id, lead3Id];
+
+    // Audit the reset with synthetic counts and IDs, without secrets
     appendAuditLog({
       eventType: 'DEMO_DATA_RESET',
       entityType: 'SYSTEM',
       entityId: 'SYNTHETIC_DATA',
       actorUserId: adminUserId,
-      previousState: null,
-      newState: { leadsCreated: 3, resetAt: nowIso }
+      previousState: {
+        deletedCount: deletedLeadIds.length,
+        deletedLeadIds
+      },
+      newState: {
+        createdCount: createdLeadIds.length,
+        createdLeadIds,
+        resetAt: nowIso
+      }
     }, db);
+
+    result = {
+      success: true,
+      count: createdLeadIds.length,
+      deletedCount: deletedLeadIds.length,
+      deletedLeadIds,
+      createdLeadIds,
+      resetAt: nowIso
+    };
   });
 
-  return { success: true, count: 3, resetAt: nowIso };
+  return result;
 }
