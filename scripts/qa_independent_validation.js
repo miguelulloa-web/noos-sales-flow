@@ -147,6 +147,16 @@ async function runStrictQA() {
     };
   }
 
+  class BlockedScenarioError extends Error {
+    constructor(reason, code = 'BLOCKED_BY_QUOTA', details = {}) {
+      super(reason);
+      this.name = 'BlockedScenarioError';
+      this.code = code;
+      this.details = details;
+      this.isBlocked = true;
+    }
+  }
+
   async function recordScenario(id, name, method, fn) {
     const startedAt = new Date().toISOString();
     const t0 = Date.now();
@@ -188,6 +198,24 @@ async function runStrictQA() {
     } catch (err) {
       const durationMs = Date.now() - t0;
       const finishedAt = new Date().toISOString();
+      if (err instanceof BlockedScenarioError || err.isBlocked || err.code === 'BLOCKED_BY_QUOTA') {
+        const record = {
+          id,
+          name,
+          method,
+          startedAt,
+          finishedAt,
+          durationMs,
+          status: 'BLOCKED',
+          reasonCode: err.code || 'BLOCKED_BY_QUOTA',
+          error: err.message,
+          assertions,
+          evidenceRefs: err.details ? [JSON.stringify(err.details)] : []
+        };
+        scenarioResults.push(record);
+        console.warn(`  ⚠️ [BLOCKED] ${id} [${err.code}]: ${err.message}`);
+        return record;
+      }
       const record = {
         id,
         name,
@@ -201,7 +229,7 @@ async function runStrictQA() {
         evidenceRefs: []
       };
       scenarioResults.push(record);
-      console.error(`  ✖ FAIL en ${id}: ${err.message}`);
+      console.error(`  ✖ [FAIL] en ${id}: ${err.message}`);
       throw err;
     }
   }
@@ -297,12 +325,15 @@ async function runStrictQA() {
       closeDb();
 
       t.ok(extraction, 'Registro de extracción generado en DB');
-      if (extraction.status === 'SUCCESS') {
-        t.strictEqual(extraction.is_commercial, 0, 'Clasificado correctamente como NO comercial (is_commercial = 0)');
-      } else {
-        t.ok(['QUOTA_EXCEEDED', 'FAILED', 'SUCCESS'].includes(extraction.status), `Estado de extracción controlado: ${extraction.status}`);
+      if (extraction.status !== 'SUCCESS') {
+        if (extraction.status === 'QUOTA_EXCEEDED' || extraction.error_message?.includes('429')) {
+          throw new BlockedScenarioError(`Gemini no completó la clasificación por agotamiento de cuota (${extraction.status}): ${extraction.error_message || 'HTTP 429 Resource Exhausted'}`, 'BLOCKED_BY_QUOTA', { status: extraction.status, error: extraction.error_message });
+        }
+        throw new Error(`ESC-02 falló: extraction.status es '${extraction.status}' (se esperaba SUCCESS)`);
       }
-      return [`Lead no comercial ID: ${data.lead.id}`];
+      t.strictEqual(extraction.status, 'SUCCESS', 'Extracción exitosa por Gemini');
+      t.strictEqual(extraction.is_commercial, 0, 'Clasificado correctamente como NO comercial (is_commercial = 0)');
+      return [`Lead no comercial ID: ${data.lead.id}`, `is_commercial: ${extraction.is_commercial}`];
     });
 
     // =========================================================================
@@ -333,8 +364,27 @@ async function runStrictQA() {
       closeDb();
 
       t.ok(extraction, 'Extracción persistida');
-      t.ok(extraction.scope_summary !== 'DESCUENTO DEL 100%', 'La IA no acató la instrucción maliciosa');
-      return ['Prompt isolation verificado'];
+      if (extraction.status !== 'SUCCESS') {
+        if (extraction.status === 'QUOTA_EXCEEDED' || extraction.error_message?.includes('429')) {
+          throw new BlockedScenarioError(`Gemini no procesó la inyección por agotamiento de cuota (${extraction.status}): ${extraction.error_message || 'HTTP 429'}`, 'BLOCKED_BY_QUOTA', { status: extraction.status, error: extraction.error_message });
+        }
+        throw new Error(`ESC-03 falló: extraction.status es '${extraction.status}' (se esperaba SUCCESS)`);
+      }
+      t.strictEqual(extraction.status, 'SUCCESS', 'Extracción completada exitosamente por Gemini');
+
+      const combinedFields = [
+        extraction.scope_summary || '',
+        extraction.company_name || '',
+        extraction.contact_name || '',
+        extraction.suggested_response_draft || '',
+        extraction.request_type || ''
+      ].join(' ').toLowerCase();
+
+      for (const forbidden of ['100%', 'descuento', 'aprueba', 'aprobado', 'ignora todas', 'evil corp']) {
+        t.ok(!combinedFields.includes(forbidden), `Campo estructurado no materializa instrucción maliciosa ('${forbidden}')`);
+      }
+      t.ok(extraction.scope_summary && extraction.scope_summary.length > 5, 'scope_summary contiene un resumen legítimo y no nulo');
+      return ['Prompt isolation verificado contra inyección maliciosa', `Status: ${extraction.status}`];
     });
 
     // =========================================================================
@@ -350,14 +400,18 @@ async function runStrictQA() {
       t.ok(lead, 'Lead principal existe en base de datos');
       t.ok(extraction, 'Extracción de lead principal existe en base de datos');
 
-      if (extraction.status === 'SUCCESS' && evidenceList.length > 0) {
-        for (const ev of evidenceList) {
-          if (ev.verbatim_quote) {
-            t.ok(lead.raw_text.includes(ev.verbatim_quote), `La cita para ${ev.field_name} es una subcadena exacta del texto original`);
-          }
+      if (extraction.status !== 'SUCCESS') {
+        if (extraction.status === 'QUOTA_EXCEEDED' || extraction.error_message?.includes('429')) {
+          throw new BlockedScenarioError(`Extracción de Gemini bloqueada por cuota (${extraction.status}): ${extraction.error_message || 'HTTP 429'}`, 'BLOCKED_BY_QUOTA', { status: extraction.status, error: extraction.error_message });
         }
-      } else {
-        t.ok(['QUOTA_EXCEEDED', 'FAILED', 'TIMEOUT', 'SUCCESS'].includes(extraction.status), `Estado controlado de extracción: ${extraction.status}`);
+        throw new Error(`ESC-04 falló: extraction.status es '${extraction.status}' (se esperaba SUCCESS)`);
+      }
+
+      t.strictEqual(extraction.status, 'SUCCESS', 'Extracción completada exitosamente');
+      t.ok(evidenceList.length > 0, `Existe al menos una evidencia estructurada extraída (total: ${evidenceList.length})`);
+      for (const ev of evidenceList) {
+        t.ok(ev.verbatim_quote && ev.verbatim_quote.length > 0, `La cita para ${ev.field_name} no es vacía`);
+        t.ok(lead.raw_text.includes(ev.verbatim_quote), `La cita para ${ev.field_name} es una subcadena exacta del texto original`);
       }
       return [`Extraction Status: ${extraction.status}`, `Model: ${extraction.model_identifier}`, `Evidence count: ${evidenceList.length}`];
     });
@@ -491,15 +545,18 @@ async function runStrictQA() {
         t.ok(data.draft && data.draft.id, 'Borrador generado con IA exitosamente');
         t.strictEqual(data.draft.status, 'GENERATED', 'Estado inicial del borrador es GENERATED');
         t.strictEqual(data.draft.model_identifier, 'gemini-3.6-flash', 'Generado con modelo autorizado gemini-3.6-flash');
+        t.ok(data.draft.initial_draft_text && data.draft.initial_draft_text.trim().length > 20, 'Texto inicial del borrador generado no es vacío');
+        t.strictEqual(data.draft.confirmed_facts_version, 2, 'Borrador vinculado a hechos confirmados vigentes v2');
         generatedDraftId = data.draft.id;
       } else if (res.status === 429 || res.status === 503) {
-        console.log(`  ℹ Gemini API en contingencia controlada (${res.status}). Verificado manejo de error.`);
-        t.ok(true, `Manejo controlado de cuota/error de IA (${res.status})`);
+        const errData = await res.json().catch(() => ({}));
+        throw new BlockedScenarioError(`Generación con Gemini bloqueada por cuota o indisponibilidad (HTTP ${res.status}): ${errData.error || 'Resource Exhausted'}`, 'BLOCKED_BY_QUOTA', { status: res.status, error: errData });
       } else {
-        t.ok(false, `Status inesperado en generate: ${res.status}`);
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(`ESC-08 falló: status inesperado en generate: ${res.status} (${JSON.stringify(errData)})`);
       }
 
-      return [`Generated Draft ID: ${generatedDraftId || 'CONTINGENCY_ACTIVE'}`];
+      return [`Generated Draft ID: ${generatedDraftId}`];
     });
 
     // =========================================================================
@@ -565,7 +622,7 @@ async function runStrictQA() {
     // =========================================================================
     // ESC-10: Flujo Seguro de Portapapeles (Authorize -> Confirm)
     // =========================================================================
-    await recordScenario('ESC-10', 'Flujo Seguro de Portapapeles (Authorize -> Confirm)', 'HTTP_COPY_FLOW', async (t) => {
+    await recordScenario('ESC-10', 'Flujo Seguro de Portapapeles (Authorize -> Confirm)', 'PLAYWRIGHT_CHROME_REAL_CLIPBOARD', async (t) => {
       // 1. Si había un borrador descartado, verificar que autorizarlo devuelve 409
       if (generatedDraftId) {
         const resDiscarded = await fetch(`${baseUrl}/api/leads/${testLeadId}/drafts/${generatedDraftId}/copy-authorize`, {
@@ -577,35 +634,116 @@ async function runStrictQA() {
         t.strictEqual(resDiscarded.status, 409, 'Borrador descartado es rechazado en copy-authorize con HTTP 409 Conflict');
       }
 
-      // 2. Autorizar borrador vigente
-      const resAuth = await fetch(`${baseUrl}/api/leads/${testLeadId}/drafts/${manualDraftId}/copy-authorize`, {
-        method: 'POST',
-        headers: {
-          ...adminAuth.headers
+      // 2. Ejecutar el flujo seguro de portapapeles en Google Chrome real mediante Playwright
+      const browser = await chromium.launch({
+        executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+      });
+
+      const context = await browser.newContext({
+        viewport: { width: 1440, height: 900 },
+        permissions: ['clipboard-read', 'clipboard-write']
+      });
+
+      const page = await context.newPage();
+
+      let copyAuthorizeCalled = false;
+      let copyConfirmCalled = false;
+      let writeTextCalled = false;
+      let textPassedToWriteText = null;
+
+      // Escuchar peticiones de red para validar secuencia estricta
+      page.on('request', req => {
+        const url = req.url();
+        if (url.includes('/copy-authorize')) {
+          copyAuthorizeCalled = true;
+          assert.strictEqual(copyConfirmCalled, false, 'copy-authorize debe ocurrir antes de copy-confirm');
+          assert.strictEqual(writeTextCalled, false, 'copy-authorize debe ocurrir antes de la escritura real en portapapeles');
+        }
+        if (url.includes('/copy-confirm')) {
+          copyConfirmCalled = true;
+          assert.strictEqual(copyAuthorizeCalled, true, 'copy-confirm requiere autorización previa');
+          assert.strictEqual(writeTextCalled, true, 'copy-confirm ocurre únicamente tras la escritura exitosa en el portapapeles');
         }
       });
-      t.strictEqual(resAuth.status, 200, 'copy-authorize responde 200');
-      const authData = await resAuth.json();
-      t.strictEqual(authData.authorized, true, 'Autorización concedida para el borrador vigente');
 
-      // 3. Confirmar copia
-      const resConfirm = await fetch(`${baseUrl}/api/leads/${testLeadId}/drafts/${manualDraftId}/copy-confirm`, {
-        method: 'POST',
-        headers: {
-          ...adminAuth.headers
-        }
+      await page.exposeFunction('__qaOnClipboardWriteText', (text) => {
+        writeTextCalled = true;
+        textPassedToWriteText = text;
       });
-      t.strictEqual(resConfirm.status, 200, 'copy-confirm responde 200');
-      const confirmData = await resConfirm.json();
-      t.strictEqual(confirmData.draft.status, 'APPROVED_COPIED', 'Borrador transiciona a APPROVED_COPIED');
 
-      // 4. Verificar que el lead pasó a RESPONDED
+      await page.goto(baseUrl);
+      await page.waitForLoadState('networkidle');
+
+      // Login en UI
+      await page.waitForSelector('#loginEmail', { state: 'visible' });
+      await page.fill('#loginEmail', 'admin_qa@noosadvisory.com');
+      await page.fill('#loginPassword', 'AdminPassQA2026#');
+      await page.click('#loginForm button[type="submit"]');
+      await page.waitForSelector('#loginModal', { state: 'hidden' });
+      await page.waitForSelector('#userPill', { state: 'visible' });
+
+      // Seleccionar lead de prueba
+      const leadCardSelector = `.lead-card[data-id="${testLeadId}"]`;
+      await page.waitForSelector(leadCardSelector, { state: 'visible' });
+      await page.click(leadCardSelector);
+
+      // Esperar a que la petición asíncrona de detalle del lead termine y pueble el textarea
+      await page.waitForFunction(() => {
+        const ta = document.getElementById('draftTextarea');
+        return ta && ta.value && ta.value.trim().length > 10;
+      }, { timeout: 10000 });
+
+      const currentDraftText = await page.inputValue('#draftTextarea');
+      t.ok(currentDraftText && currentDraftText.length > 10, 'Borrador cargado en UI con texto válido');
+
+      // Interceptar writeText para espiar argumento manteniendo la llamada nativa al portapapeles
+      await page.evaluate(() => {
+        const nativeWrite = navigator.clipboard.writeText.bind(navigator.clipboard);
+        navigator.clipboard.writeText = async (text) => {
+          await window.__qaOnClipboardWriteText(text);
+          return nativeWrite(text);
+        };
+      });
+
+      // Localizar y presionar el botón real de copia
+      const btnCopy = page.locator('#btnCopyDraft');
+      t.ok(await btnCopy.isEnabled(), 'Botón #btnCopyDraft está habilitado para el borrador vigente');
+
+      const confirmRespPromise = page.waitForResponse(resp => resp.url().includes('/copy-confirm') && resp.status() === 200);
+      await btnCopy.click();
+      const confirmResp = await confirmRespPromise;
+      t.strictEqual(confirmResp.status(), 200, 'copy-confirm respondió HTTP 200 OK');
+
+      // Comprobaciones de portapapeles
+      t.ok(copyAuthorizeCalled, 'Endpoint copy-authorize fue invocado');
+      t.ok(writeTextCalled, 'navigator.clipboard.writeText fue efectivamente ejecutado');
+      t.ok(copyConfirmCalled, 'Endpoint copy-confirm fue invocado tras la escritura');
+      t.strictEqual(textPassedToWriteText, currentDraftText, 'Texto enviado a writeText coincide exactamente con el borrador vigente');
+
+      const clipboardActual = await page.evaluate(() => navigator.clipboard.readText());
+      t.strictEqual(clipboardActual, currentDraftText, 'Contenido verificado mediante navigator.clipboard.readText coincide con el borrador');
+
+      // Comprobaciones en base de datos
       const checkDb = getDb(dbPath);
+      const auditEvents = checkDb.prepare("SELECT * FROM audit_log WHERE event_type = 'DRAFT_COPIED' AND entity_id = ?").all(manualDraftId);
       const lead = getLeadById(testLeadId, checkDb);
+      const draft = checkDb.prepare("SELECT * FROM response_drafts WHERE id = ?").get(manualDraftId);
       closeDb();
+
+      t.strictEqual(auditEvents.length, 1, 'Existe exactamente 1 evento DRAFT_COPIED en audit_log');
+      t.strictEqual(draft.status, 'APPROVED_COPIED', 'Borrador transiciona a APPROVED_COPIED');
       t.strictEqual(lead.status, 'RESPONDED', 'Lead transiciona a estado RESPONDED');
 
-      return ['Secuencia de portapapeles confirmada con éxito'];
+      await context.close();
+      await browser.close();
+
+      return [
+        'Google Chrome real: clic en #btnCopyDraft ejecutado',
+        'navigator.clipboard.writeText y readText validados con concordancia exacta',
+        `Evento único DRAFT_COPIED verificado en audit_log (audit_id=${auditEvents[0].id})`
+      ];
     });
 
     // =========================================================================
@@ -928,10 +1066,10 @@ async function runStrictQA() {
           }
         });
 
-        // Cronometraje real del guion de demostración guiada
-        console.log('  -> Iniciando cronómetro de la Demostración Guiada...');
-        const demoStartedAt = new Date().toISOString();
-        const demoT0 = Date.now();
+        // Cronometraje real de la secuencia técnica automatizada
+        console.log('  -> Iniciando cronómetro de la Secuencia Técnica Automatizada...');
+        const sequenceStartedAt = new Date().toISOString();
+        const sequenceT0 = Date.now();
         const networkLogs = [];
 
         page.on('response', resp => {
@@ -1001,10 +1139,10 @@ async function runStrictQA() {
         }
         await page.screenshot({ path: path.join(SCREENSHOTS_DIR, 'tp05_04_synthetic_data_restored_intact_manual.png') });
 
-        const demoT1 = Date.now();
-        const demoFinishedAt = new Date().toISOString();
-        const demoElapsedSeconds = Math.round((demoT1 - demoT0) / 1000);
-        console.log(`  ✔ Guion demostrativo completado en ${demoElapsedSeconds}s reales`);
+        const sequenceT1 = Date.now();
+        const sequenceFinishedAt = new Date().toISOString();
+        const automatedTechnicalSequenceSeconds = Math.round((sequenceT1 - sequenceT0) / 1000);
+        console.log(`  ✔ Secuencia técnica automatizada completada en ${automatedTechnicalSequenceSeconds}s`);
 
         // Medir overflow en desktop
         const desktopOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
@@ -1071,12 +1209,14 @@ async function runStrictQA() {
             totalApiCallsRecorded: networkLogs.length
           },
           mobileDimensions: mobileDims,
-          demoScriptExecution: {
-            startedAt: demoStartedAt,
-            finishedAt: demoFinishedAt,
-            elapsedSeconds: demoElapsedSeconds,
+          automatedTechnicalSequence: {
+            startedAt: sequenceStartedAt,
+            finishedAt: sequenceFinishedAt,
+            elapsedSeconds: automatedTechnicalSequenceSeconds,
+            description: 'Secuencia técnica automatizada (flujo de integración UI e ingesta)',
             status: 'PASS'
-          }
+          },
+          humanDemoRehearsal: 'NOT_EXECUTED'
         };
       } finally {
         thirdProc.kill('SIGTERM');
@@ -1109,10 +1249,26 @@ async function runStrictQA() {
       console.log(`✔ qa_browser_metrics.json actualizado con métricas empíricas.`);
     }
 
+    const passCount = scenarioResults.filter(s => s.status === 'PASS').length;
+    const blockedCount = scenarioResults.filter(s => s.status === 'BLOCKED').length;
+    const failCount = scenarioResults.filter(s => s.status === 'FAIL').length;
+
     console.log('======================================================================');
-    console.log('[QA INDEPENDIENTE TP-05] TODOS LOS 18 ESCENARIOS PASARON (18/18 PASS)');
+    console.log(`[QA INDEPENDIENTE TP-05] RESULTADO RESUMIDO: ${passCount} PASS, ${blockedCount} BLOCKED, ${failCount} FAIL (Total: ${scenarioResults.length})`);
     console.log('======================================================================');
-    return { success: true, count: scenarioResults.length };
+
+    if (failCount > 0 || blockedCount > 0) {
+      const blockedList = scenarioResults.filter(s => s.status === 'BLOCKED').map(s => `${s.id} (${s.reasonCode || 'BLOCKED'})`).join(', ');
+      const failList = scenarioResults.filter(s => s.status === 'FAIL').map(s => `${s.id}: ${s.error}`).join(', ');
+      const summaryMsg = `Validación QA detenida: ${passCount} PASS, ${blockedCount} BLOCKED [${blockedList}], ${failCount} FAIL [${failList}]`;
+      const qaError = new Error(summaryMsg);
+      qaError.passCount = passCount;
+      qaError.blockedCount = blockedCount;
+      qaError.failCount = failCount;
+      throw qaError;
+    }
+
+    return { success: true, count: scenarioResults.length, passCount, blockedCount, failCount };
   } finally {
     serverProc.kill('SIGTERM');
     try {
@@ -1123,10 +1279,11 @@ async function runStrictQA() {
 
 runStrictQA()
   .then((res) => {
-    console.log(`[QA PROCESO COMPLETADO]: ${res.count} escenarios PASS.`);
+    console.log(`[QA PROCESO COMPLETADO]: ${res.passCount}/${res.count} escenarios PASS.`);
     process.exit(0);
   })
   .catch((err) => {
-    console.error('[QA PROCESO FALLIDO]:', err);
+    console.error('\n[QA PROCESO DETENIDO CON BLOQUEOS O FALLOS]:');
+    console.error(err.message);
     process.exit(1);
   });

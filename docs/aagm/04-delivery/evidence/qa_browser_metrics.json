@@ -26,10 +26,12 @@
     "clientWidth": 390,
     "hasDocumentOverflow": false
   },
-  "demoScriptExecution": {
-    "startedAt": "2026-09-24T00:02:46.190Z",
-    "finishedAt": "2026-09-24T00:02:52.166Z",
-    "elapsedSeconds": 6,
+  "automatedTechnicalSequence": {
+    "startedAt": "2026-09-24T01:00:17.543Z",
+    "finishedAt": "2026-09-24T01:00:24.337Z",
+    "elapsedSeconds": 7,
+    "description": "Secuencia técnica automatizada (flujo de integración UI e ingesta)",
     "status": "PASS"
-  }
+  },
+  "humanDemoRehearsal": "NOT_EXECUTED"
 }

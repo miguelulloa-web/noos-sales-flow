@@ -3,8 +3,8 @@ requirement: "MVP de Captura y Seguimiento Comercial con IA para NoosAdvisory ba
 modality: MUST
 type: MODIFICATION
 priority: HIGH
-status: READY_FOR_RELEASE
-current_stage: READY_FOR_RELEASE
+status: VALIDATING
+current_stage: VALIDATING
 owner: ORCHESTRATOR_PM
 decision_refs:
   - "Ruta A aprobada por Sponsor (2026-09-14)"
@@ -19,7 +19,7 @@ task_packets:
   - TP-02 (DONE)
   - TP-03 (DONE)
   - TP-04 (DONE)
-  - TP-05 (DONE)
+  - TP-05 (QA)
 
 
 commits_or_prs:
@@ -54,4 +54,4 @@ release: null
 release_gate: NOT_EVALUATED
 environment: DEV
 production_validation_ref: null
-next_action: "Solicitar autorización expresa del Sponsor para evaluar el Release Gate"
+next_action: "Resolver el agotamiento de cuota de Google Gemini API (HTTP 429) para desbloquear los 4 escenarios de IA en QA de TP-05 antes de solicitar Release Gate"
