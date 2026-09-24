@@ -21,6 +21,7 @@ task_packets:
   - TP-04 (DONE)
   - TP-05 (DONE)
 
+
 commits_or_prs:
   - "8f214f5 (feat: implement TP-01 local foundation, persistence, auth and audit log)"
   - "779a048 (fix(auth-db): enforce db triggers, exact origin matching, secure bootstrap and real blackbox tests)"
@@ -53,4 +54,4 @@ release: null
 release_gate: NOT_EVALUATED
 environment: DEV
 production_validation_ref: null
-next_action: "Evaluación formal del Release Gate de CHG-001 por el ORCHESTRATOR_PM tras autorización del Sponsor (/aagm-release-gate)"
+next_action: "Solicitar autorización expresa del Sponsor para evaluar el Release Gate"

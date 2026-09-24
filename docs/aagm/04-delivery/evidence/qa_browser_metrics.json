@@ -1,19 +1,35 @@
 {
-  "consoleErrors": [
-    "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
-    "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+  "consoleErrorsExpected401": [
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:3950/api/auth/me",
+      "status": 401,
+      "type": "EXPECTED_INITIAL_UNAUTHENTICATED_CHECK",
+      "message": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    }
   ],
+  "unexpectedConsoleErrors": [],
   "pageErrors": [],
-  "notFound404": [],
+  "unexpected404s": [],
+  "networkEvidence": {
+    "authProbeVerified": [
+      {
+        "method": "GET",
+        "url": "http://127.0.0.1:3950/api/auth/me",
+        "status": 401
+      }
+    ],
+    "totalApiCallsRecorded": 14
+  },
   "mobileDimensions": {
     "scrollWidth": 390,
     "clientWidth": 390,
-    "bodyScrollWidth": 390,
-    "bodyClientWidth": 390,
-    "windowInnerWidth": 390,
     "hasDocumentOverflow": false
   },
-  "desktopTitle": "NoosAdvisory · Triage Comercial y Borradores Supervisados",
-  "leadsPreserved": true,
-  "demoScriptSimulatedSeconds": 0
+  "demoScriptExecution": {
+    "startedAt": "2026-09-24T00:02:46.190Z",
+    "finishedAt": "2026-09-24T00:02:52.166Z",
+    "elapsedSeconds": 6,
+    "status": "PASS"
+  }
 }

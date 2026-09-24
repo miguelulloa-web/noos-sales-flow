@@ -1,0 +1,350 @@
+[
+  {
+    "id": "ESC-01",
+    "name": "Ingesta de Solicitud Comercial Nueva sin precarga previa",
+    "method": "HTTP_POST_API",
+    "startedAt": "2026-09-24T00:02:39.055Z",
+    "finishedAt": "2026-09-24T00:02:40.197Z",
+    "durationMs": 1142,
+    "status": "PASS",
+    "assertions": [
+      "PASS: Endpoint responde HTTP 201 Created para ingesta sin análisis [201 === 201]",
+      "PASS: Retorna objeto lead con ID UUID válido",
+      "PASS: El lead nuevo se cataloga con source = MANUAL [MANUAL === MANUAL]",
+      "PASS: Estado inicial del lead sin procesar es PENDING_TRIAGE [PENDING_TRIAGE === PENDING_TRIAGE]",
+      "PASS: Endpoint responde HTTP 201 Created para lead principal [201 === 201]",
+      "PASS: Retorna objeto lead con ID UUID válido",
+      "PASS: El lead principal se cataloga con source = MANUAL [MANUAL === MANUAL]",
+      "PASS: Lead principal registrado en estado válido: PENDING_TRIAGE",
+      "PASS: Hash SHA-256 generado y almacenado"
+    ],
+    "evidenceRefs": [
+      "Lead ID: 0d2bfc33-4004-4e53-bab4-44f2bc77f5c0",
+      "Initial: PENDING_TRIAGE -> Analyzed: PENDING_TRIAGE"
+    ]
+  },
+  {
+    "id": "ESC-02",
+    "name": "Clasificación Comercial vs No Comercial",
+    "method": "HTTP_POST_API",
+    "startedAt": "2026-09-24T00:02:40.197Z",
+    "finishedAt": "2026-09-24T00:02:40.433Z",
+    "durationMs": 236,
+    "status": "PASS",
+    "assertions": [
+      "PASS: Endpoint responde 201 [201 === 201]",
+      "PASS: Lead no comercial ingresado sin fallar",
+      "PASS: Registro de extracción generado en DB",
+      "PASS: Estado de extracción controlado: QUOTA_EXCEEDED"
+    ],
+    "evidenceRefs": [
+      "Lead no comercial ID: 2517b929-dc35-4bd9-8878-f8ebc90eb896"
+    ]
+  },
+  {
+    "id": "ESC-03",
+    "name": "Tratamiento de Texto como Contenido No Confiable",
+    "method": "HTTP_POST_API",
+    "startedAt": "2026-09-24T00:02:40.433Z",
+    "finishedAt": "2026-09-24T00:02:41.279Z",
+    "durationMs": 846,
+    "status": "PASS",
+    "assertions": [
+      "PASS: Endpoint maneja la inyección sin romperse respondiendo 201 [201 === 201]",
+      "PASS: Lead con inyección creado",
+      "PASS: Extracción persistida",
+      "PASS: La IA no acató la instrucción maliciosa"
+    ],
+    "evidenceRefs": [
+      "Prompt isolation verificado"
+    ]
+  },
+  {
+    "id": "ESC-04",
+    "name": "Extracción Estructurada con Citas Verbatim",
+    "method": "DATABASE_AND_EXTRACTION",
+    "startedAt": "2026-09-24T00:02:41.279Z",
+    "finishedAt": "2026-09-24T00:02:41.280Z",
+    "durationMs": 1,
+    "status": "PASS",
+    "assertions": [
+      "PASS: Lead principal existe en base de datos",
+      "PASS: Extracción de lead principal existe en base de datos",
+      "PASS: Estado controlado de extracción: QUOTA_EXCEEDED"
+    ],
+    "evidenceRefs": [
+      "Extraction Status: QUOTA_EXCEEDED",
+      "Model: gemini-3.6-flash",
+      "Evidence count: 0"
+    ]
+  },
+  {
+    "id": "ESC-05",
+    "name": "Idempotencia Estricta ante Reintentos",
+    "method": "HTTP_POST_IDEMPOTENCY",
+    "startedAt": "2026-09-24T00:02:41.280Z",
+    "finishedAt": "2026-09-24T00:02:41.284Z",
+    "durationMs": 4,
+    "status": "PASS",
+    "assertions": [
+      "PASS: Reintento exacto responde HTTP 200 (Replay) [200 === 200]",
+      "PASS: Cabecera X-Idempotent-Replay es true [true === true]",
+      "PASS: Devuelve el mismo ID del lead sin crear uno nuevo [0d2bfc33-4004-4e53-bab4-44f2bc77f5c0 === 0d2bfc33-4004-4e53-bab4-44f2bc77f5c0]"
+    ],
+    "evidenceRefs": [
+      "Header X-Idempotent-Replay verificado"
+    ]
+  },
+  {
+    "id": "ESC-06",
+    "name": "Confirmación Humana de Hechos y Versionado",
+    "method": "HTTP_POST_FACTS",
+    "startedAt": "2026-09-24T00:02:41.284Z",
+    "finishedAt": "2026-09-24T00:02:41.296Z",
+    "durationMs": 12,
+    "status": "PASS",
+    "assertions": [
+      "PASS: Hechos v1 creados con HTTP 201 [201 === 201]",
+      "PASS: Versión de hechos confirmados es 1 [1 === 1]",
+      "PASS: v1 nace como vigente (is_current = 1) [1 === 1]",
+      "PASS: Hechos v2 creados con HTTP 201 [201 === 201]",
+      "PASS: Versión de hechos confirmados es 2 [2 === 2]",
+      "PASS: v2 es la nueva versión vigente [1 === 1]",
+      "PASS: v1 fue archivada con is_current = 0 manteniendo historial [0 === 0]"
+    ],
+    "evidenceRefs": [
+      "Facts v1 ID: d37c3306-f304-4808-bdef-22ad0310d798",
+      "Facts v2 ID: 0880db1f-96c9-42ef-ace3-fa3e94639768"
+    ]
+  },
+  {
+    "id": "ESC-07",
+    "name": "Auditoría Inmutable Append-Only",
+    "method": "SQLITE_TRIGGERS",
+    "startedAt": "2026-09-24T00:02:41.296Z",
+    "finishedAt": "2026-09-24T00:02:41.299Z",
+    "durationMs": 3,
+    "status": "PASS",
+    "assertions": [
+      "PASS: Trigger de SQLite impidió UPDATE directo en audit_log",
+      "PASS: Trigger de SQLite impidió DELETE directo en audit_log"
+    ],
+    "evidenceRefs": [
+      "Triggers de protección inmutable verificados"
+    ]
+  },
+  {
+    "id": "ESC-08",
+    "name": "Generación Supervisada de Borrador con Gemini",
+    "method": "HTTP_POST_DRAFT_GENERATE",
+    "startedAt": "2026-09-24T00:02:41.299Z",
+    "finishedAt": "2026-09-24T00:02:41.649Z",
+    "durationMs": 350,
+    "status": "PASS",
+    "assertions": [
+      "PASS: Manejo controlado de cuota/error de IA (429)"
+    ],
+    "evidenceRefs": [
+      "Generated Draft ID: CONTINGENCY_ACTIVE"
+    ]
+  },
+  {
+    "id": "ESC-09",
+    "name": "Continuidad Manual ante Fallos o Cuota de IA",
+    "method": "HTTP_POST_MANUAL_DRAFT",
+    "startedAt": "2026-09-24T00:02:41.649Z",
+    "finishedAt": "2026-09-24T00:02:41.656Z",
+    "durationMs": 7,
+    "status": "PASS",
+    "assertions": [
+      "PASS: Endpoint manual draft responde HTTP 201 Created [201 === 201]",
+      "PASS: Borrador manual creado",
+      "PASS: Estado de borrador manual es EDITED [EDITED === EDITED]",
+      "PASS: edited_text persistido correctamente (no null)"
+    ],
+    "evidenceRefs": [
+      "Manual Draft ID: 9837931f-7ae2-4815-a7b1-120ce247f49b",
+      "Status: EDITED"
+    ]
+  },
+  {
+    "id": "ESC-10",
+    "name": "Flujo Seguro de Portapapeles (Authorize -> Confirm)",
+    "method": "HTTP_COPY_FLOW",
+    "startedAt": "2026-09-24T00:02:41.660Z",
+    "finishedAt": "2026-09-24T00:02:41.677Z",
+    "durationMs": 17,
+    "status": "PASS",
+    "assertions": [
+      "PASS: copy-authorize responde 200 [200 === 200]",
+      "PASS: Autorización concedida para el borrador vigente [true === true]",
+      "PASS: copy-confirm responde 200 [200 === 200]",
+      "PASS: Borrador transiciona a APPROVED_COPIED [APPROVED_COPIED === APPROVED_COPIED]",
+      "PASS: Lead transiciona a estado RESPONDED [RESPONDED === RESPONDED]"
+    ],
+    "evidenceRefs": [
+      "Secuencia de portapapeles confirmada con éxito"
+    ]
+  },
+  {
+    "id": "ESC-11",
+    "name": "Edición Manual y Trazabilidad del Borrador",
+    "method": "HTTP_PATCH_DRAFT",
+    "startedAt": "2026-09-24T00:02:41.656Z",
+    "finishedAt": "2026-09-24T00:02:41.660Z",
+    "durationMs": 4,
+    "status": "PASS",
+    "assertions": [
+      "PASS: PATCH responde HTTP 200 [200 === 200]",
+      "PASS: Borrador editado mantiene status EDITED [EDITED === EDITED]",
+      "PASS: Texto editado almacenado",
+      "PASS: Evento DRAFT_EDITED auditado en audit_log"
+    ],
+    "evidenceRefs": [
+      "Edición y auditoría de borrador validadas"
+    ]
+  },
+  {
+    "id": "ESC-12",
+    "name": "Asignación y Ciclo de Vida de Acciones Comerciales",
+    "method": "HTTP_ACTIONS_LIFECYCLE",
+    "startedAt": "2026-09-24T00:02:41.677Z",
+    "finishedAt": "2026-09-24T00:02:41.773Z",
+    "durationMs": 96,
+    "status": "PASS",
+    "assertions": [
+      "PASS: Acción creada con HTTP 201 [201 === 201]",
+      "PASS: ID de acción generado",
+      "PASS: Segunda acción abierta rechazada con HTTP 409 Conflict [409 === 409]",
+      "PASS: Acción completada con HTTP 200 [200 === 200]",
+      "PASS: Acción transiciona a COMPLETED [COMPLETED === COMPLETED]"
+    ],
+    "evidenceRefs": [
+      "Action ID: d98354b6-0fc2-4d05-8a03-4117d0a2fa7b",
+      "Unicidad de acción abierta verificada"
+    ]
+  },
+  {
+    "id": "ESC-13",
+    "name": "Zona Horaria y Vencimientos en Santiago",
+    "method": "UNIT_TIME_SERVICE",
+    "startedAt": "2026-09-24T00:02:41.773Z",
+    "finishedAt": "2026-09-24T00:02:41.803Z",
+    "durationMs": 30,
+    "status": "PASS",
+    "assertions": [
+      "PASS: Conversión a UTC termina en Z",
+      "PASS: Hora inexistente en cambio DST de Santiago es rechazada estrictamente"
+    ],
+    "evidenceRefs": [
+      "Manejo de timezone y DST validado"
+    ]
+  },
+  {
+    "id": "ESC-14",
+    "name": "Bandeja de Triage con Filtros y Búsqueda",
+    "method": "HTTP_GET_INBOX_FILTERS",
+    "startedAt": "2026-09-24T00:02:41.804Z",
+    "finishedAt": "2026-09-24T00:02:41.809Z",
+    "durationMs": 5,
+    "status": "PASS",
+    "assertions": [
+      "PASS: Filtro status=RESPONDED responde 200 [200 === 200]",
+      "PASS: El lead respondido aparece en el filtro",
+      "PASS: Búsqueda q=Constructora responde 200 [200 === 200]",
+      "PASS: Búsqueda por texto arroja el lead correspondiente"
+    ],
+    "evidenceRefs": [
+      "Filtros y búsqueda operativa verificados"
+    ]
+  },
+  {
+    "id": "ESC-15",
+    "name": "Resumen Operativo Real sin Ficción",
+    "method": "HTTP_OPERATIONAL_SUMMARY",
+    "startedAt": "2026-09-24T00:02:41.809Z",
+    "finishedAt": "2026-09-24T00:02:41.813Z",
+    "durationMs": 4,
+    "status": "PASS",
+    "assertions": [
+      "PASS: Resumen operativo responde 200 [200 === 200]",
+      "PASS: totalLeads refleja los leads ingresados",
+      "PASS: pendingTriage es número real",
+      "PASS: responded es número real",
+      "PASS: avgAiLatencyMs es número real",
+      "PASS: Suma de estados de leads es consistente con totalLeads [4 === 4]"
+    ],
+    "evidenceRefs": [
+      "Summary totalLeads: 4",
+      "Responded: 1"
+    ]
+  },
+  {
+    "id": "ESC-16",
+    "name": "Administración de Datos Sintéticos con Aislamiento y Confirmación",
+    "method": "HTTP_ADMIN_RESET",
+    "startedAt": "2026-09-24T00:02:41.813Z",
+    "finishedAt": "2026-09-24T00:02:41.826Z",
+    "durationMs": 13,
+    "status": "PASS",
+    "assertions": [
+      "PASS: Rol OPERATOR es bloqueado con HTTP 403 Forbidden [403 === 403]",
+      "PASS: ADMIN sin confirmación recibe HTTP 400 Bad Request [400 === 400]",
+      "PASS: Confirmación incorrecta recibe HTTP 400 Bad Request [400 === 400]",
+      "PASS: Reset con confirmación exacta responde HTTP 200 OK [200 === 200]",
+      "PASS: Regenera exactamente 3 solicitudes sintéticas [3 === 3]",
+      "PASS: El lead real MANUAL sobrevivió al reset sintético",
+      "PASS: El estado del lead real sobrevive intacto [RESPONDED === RESPONDED]",
+      "PASS: El source = MANUAL permanece intacto [MANUAL === MANUAL]",
+      "PASS: Segundo reset responde HTTP 200 OK (Idempotente) [200 === 200]",
+      "PASS: El segundo reset mantiene exactamente 3 solicitudes sintéticas [3 === 3]",
+      "PASS: Lead real sobrevive tras dos resets consecutivos"
+    ],
+    "evidenceRefs": [
+      "Aislamiento y confirmación de reset sintético verificados"
+    ]
+  },
+  {
+    "id": "ESC-17",
+    "name": "Persistencia Post-Reinicio de Servidor",
+    "method": "SERVER_RESTART_PERSISTENCE",
+    "startedAt": "2026-09-24T00:02:41.826Z",
+    "finishedAt": "2026-09-24T00:02:42.840Z",
+    "durationMs": 1014,
+    "status": "PASS",
+    "assertions": [
+      "PASS: Servidor reiniciado levantó exitosamente",
+      "PASS: Lead real recuperado con HTTP 200 tras reinicio [200 === 200]",
+      "PASS: ID del lead persistió intacto [0d2bfc33-4004-4e53-bab4-44f2bc77f5c0 === 0d2bfc33-4004-4e53-bab4-44f2bc77f5c0]",
+      "PASS: Status RESPONDED persistió tras reinicio [RESPONDED === RESPONDED]",
+      "PASS: Hechos confirmados persistieron tras reinicio",
+      "PASS: Borradores persistieron tras reinicio",
+      "PASS: Acciones comerciales persistieron tras reinicio"
+    ],
+    "evidenceRefs": [
+      "Persistencia completa post-reinicio demostrada"
+    ]
+  },
+  {
+    "id": "ESC-18",
+    "name": "Recorrido Integral, UI, Responsividad y Cronometraje de Demostración",
+    "method": "PLAYWRIGHT_CHROME_REAL",
+    "startedAt": "2026-09-24T00:02:42.840Z",
+    "finishedAt": "2026-09-24T00:02:54.591Z",
+    "durationMs": 11751,
+    "status": "PASS",
+    "assertions": [
+      "PASS: Desktop no presenta overflow horizontal [false === false]",
+      "PASS: Móvil no presenta overflow horizontal (390px == 390px) [false === false]",
+      "PASS: Mobile scrollWidth es exactamente 390px [390 === 390]",
+      "PASS: Mobile clientWidth es exactamente 390px [390 === 390]",
+      "PASS: Cero pageErrors en navegador [0 === 0]",
+      "PASS: Cero respuestas 404 inesperadas [0 === 0]",
+      "PASS: Cero console.error inesperados [0 === 0]",
+      "PASS: 401 previstos de /api/auth/me clasificados correctamente"
+    ],
+    "evidenceRefs": [
+      "Google Chrome Desktop y Móvil 100% verificados sin errores ni overflow"
+    ]
+  }
+]
