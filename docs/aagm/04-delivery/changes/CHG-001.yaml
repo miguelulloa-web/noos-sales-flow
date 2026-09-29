@@ -55,7 +55,7 @@ release_gate_ref: "docs/aagm/04-delivery/RELEASE_GATE_CHG-001.md"
 quality:
   qa: PASS
 release: null
-release_gate: RELEASE_READY
+release_gate: RELEASE_NOT_READY
 environment: DEV
 production_validation_ref: null
-next_action: "Candidato evaluado y aprobado en Release Gate como RELEASE_READY para demostración local. A la espera de instrucciones del Sponsor para publicación o ensayo comercial guiado."
+next_action: "Release Gate emitido como RELEASE_NOT_READY debido a hallazgo de credenciales operacionales en historia Git. A la espera de decisión del Sponsor sobre saneamiento previo a push."

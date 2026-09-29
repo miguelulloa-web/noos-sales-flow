@@ -27,7 +27,7 @@ transition:
   recorded_at: "2026-09-29T08:35:00-03:00"
 readiness:
   delivery: READY_FOR_RELEASE
-  release: READY
+  release: NOT_READY
 integrations:
   - name: "Google Gemini API (gemini-3.6-flash)"
     state: VALIDATED
@@ -59,7 +59,7 @@ quality:
   empirical_validation: PASS
   qa: PASS
   regression: PASS
-  release_gate: PASS
+  release_gate: PARTIAL
 authorization:
   implementation_scope: "TP-05 — Integración, Resumen Operativo, 18 Escenarios y Preparación de Demostración (Completado y validado en DONE)"
   authorized_by: "Sponsor (Miguel Ulloa)"
@@ -67,8 +67,8 @@ authorization:
   notes: "Validación independiente completada con 18/18 escenarios PASS (Gemini 3.6 Flash real validado). Portapapeles validado en Chrome real. Suite en 56/56 PASS."
   expires_on_scope_change: true
 next_action:
-  sponsor: "Candidato listo para demostración (RELEASE_READY). Autorizar push a GitHub o realizar ensayo comercial guiado."
-  internal: AWAITING_POST_RELEASE_INSTRUCTIONS
+  sponsor: "Evaluar estrategia de saneamiento del historial Git y rotación de contraseñas locales antes de autorizar git push."
+  internal: AWAITING_GIT_HISTORY_SANITIZATION_DECISION
 dashboard:
   sync_status: SYNCED
-  last_synced_at: "2026-09-29T08:50:00-03:00"
+  last_synced_at: "2026-09-29T09:30:00-03:00"
