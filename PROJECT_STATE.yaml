@@ -24,14 +24,14 @@ transition:
     - "docs/aagm/04-delivery/evidence/EV-TP-04.md"
     - "docs/aagm/04-delivery/evidence/EV-TP-05.md"
     - "docs/aagm/04-delivery/qa/QA-TP-05.md"
-  recorded_at: "2026-09-23T20:30:00-03:00"
+  recorded_at: "2026-09-29T08:35:00-03:00"
 readiness:
-  delivery: VALIDATING
+  delivery: READY_FOR_RELEASE
   release: NOT_READY
 integrations:
   - name: "Google Gemini API (gemini-3.6-flash)"
-    state: CONFIGURED
-    notes: "Integración configurada. Validación empírica bloqueada temporalmente por agotamiento de cuota diaria free tier (HTTP 429 Too Many Requests)."
+    state: VALIDATED
+    notes: "Integración validada empíricamente en ambiente real con cuota activa en el proyecto Noos Sales (gen-lang-client-0479283212)."
   - name: "SQLite Database Engine (DEV Local)"
     state: VALIDATED
   - name: "Google Cloud Run"
@@ -42,33 +42,33 @@ integrations:
     state: DEFERRED
 changes:
   - id: CHG-001
-    status: VALIDATING
+    status: READY_FOR_RELEASE
     owner: ORCHESTRATOR_PM
 environments:
   - logical_name: DEV
     physical_target: "http://localhost:3000"
-    version: "v0.5.0-dev (TP-05 QA regularized)"
+    version: "v0.5.0-dev (TP-05 DONE · CHG-001 READY_FOR_RELEASE)"
     protection: UNPROTECTED
-    validation: "PENDING_VALIDATION (14 PASS, 4 BLOCKED por cuota de Gemini, 0 FAIL; 56/56 suite tests PASS)"
+    validation: "TP-05 DONE, 18/18 escenarios PASS y 56/56 pruebas PASS"
   - logical_name: STAGE_GCP
     physical_target: "Google Cloud Run"
     version: null
     protection: PROTECTED
     validation: "DEFERRED"
 quality:
-  empirical_validation: PENDING_VALIDATION
-  qa: PENDING_VALIDATION
+  empirical_validation: PASS
+  qa: PASS
   regression: PASS
   release_gate: NOT_EVALUATED
 authorization:
-  implementation_scope: "TP-05 — Integración, Resumen Operativo, 18 Escenarios y Preparación de Demostración (QA regularizado — BLOCKED_BY_QUOTA)"
+  implementation_scope: "TP-05 — Integración, Resumen Operativo, 18 Escenarios y Preparación de Demostración (Completado y validado en DONE)"
   authorized_by: "Sponsor (Miguel Ulloa)"
   authorized_at: "2026-09-23T11:53:49-03:00"
-  notes: "Revisión independiente detectó bloqueo de cuota en Gemini API (HTTP 429). Portapapeles validado en Chrome real. Suite en 56/56 PASS."
+  notes: "Validación independiente completada con 18/18 escenarios PASS (Gemini 3.6 Flash real validado). Portapapeles validado en Chrome real. Suite en 56/56 PASS."
   expires_on_scope_change: true
 next_action:
-  sponsor: "Resolver la cuota de Google Gemini API para ejecutar los 4 escenarios de IA pendientes. No autorizar Release Gate."
-  internal: AWAITING_GEMINI_QUOTA_RESOLUTION
+  sponsor: "Solicitar autorización expresa del Sponsor para evaluar el Release Gate de CHG-001."
+  internal: AWAITING_RELEASE_GATE_AUTHORIZATION
 dashboard:
   sync_status: SYNCED
-  last_synced_at: "2026-09-23T22:05:00-03:00"
+  last_synced_at: "2026-09-29T08:35:00-03:00"

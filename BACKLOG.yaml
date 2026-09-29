@@ -2,7 +2,7 @@ schema_version: "1.10"
 changes:
   - id: CHG-001
     summary: "MVP de Captura y Seguimiento Comercial con IA (Ruta A: DEV Local SQLite, Auth/Sesiones, Idempotencia, Borradores STALE, Auditoría Append-Only)"
-    status: VALIDATING
+    status: READY_FOR_RELEASE
     owner: ORCHESTRATOR_PM
 task_packets:
   - id: TP-01
@@ -28,5 +28,5 @@ task_packets:
   - id: TP-05
     change_id: CHG-001
     summary: "Integración, Resumen Operativo, 18 Escenarios y Preparación de Demostración"
-    status: QA
+    status: DONE
     owner: DEVELOPER
