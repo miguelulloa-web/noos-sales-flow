@@ -49,11 +49,13 @@ evidence:
   - "docs/aagm/04-delivery/evidence/EV-TP-03.md"
   - "docs/aagm/04-delivery/evidence/EV-TP-04.md"
   - "docs/aagm/04-delivery/evidence/EV-TP-05.md"
+  - "docs/aagm/04-delivery/RELEASE_GATE_CHG-001.md"
 qa_ref: "docs/aagm/04-delivery/qa/QA-TP-05.md"
+release_gate_ref: "docs/aagm/04-delivery/RELEASE_GATE_CHG-001.md"
 quality:
   qa: PASS
 release: null
-release_gate: NOT_EVALUATED
+release_gate: RELEASE_READY
 environment: DEV
 production_validation_ref: null
-next_action: "Solicitar autorización expresa del Sponsor para evaluar formalmente el Release Gate de CHG-001"
+next_action: "Candidato evaluado y aprobado en Release Gate como RELEASE_READY para demostración local. A la espera de instrucciones del Sponsor para publicación o ensayo comercial guiado."

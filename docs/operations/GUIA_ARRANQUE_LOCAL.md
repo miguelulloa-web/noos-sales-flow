@@ -124,7 +124,7 @@ Abra su navegador en: **`http://localhost:3000`**
 
 ## 7. Ejecución de la Suite Completa de Pruebas
 
-Para ejecutar las 53 pruebas automatizadas de regresión, integración y gobernanza:
+Para ejecutar las 56 pruebas automatizadas de regresión, integración y gobernanza:
 
 ```bash
 npm test
@@ -132,11 +132,12 @@ npm test
 
 La suite cubre:
 1. `auth_and_db.test.js`: Esquema, triggers append-only, bcrypt, sesiones, CSRF y roles (7 pruebas).
-2. `tp02_ingestion_and_extraction.test.js`: Ingesta, idempotencia, IA estructurada, deduplicación y resiliencia (11 pruebas).
-3. `tp03_triage_and_drafts.test.js`: Versionado de hechos, borradores STALE, bloqueo 409 y portapapeles (21 pruebas).
-4. `tp04_endpoints_and_workflow.test.js`: Operadores, acciones, vencimientos y filtros (2 pruebas).
-5. `tp04_review_corrections.test.js`: Migración segura sin rotura de FKs, DST Santiago y exportación agrupada (6 pruebas).
-6. `tp05_integration_and_operational_summary.test.js`: Resumen operativo real, resiliencia manual y reinicio sintético por ADMIN (5 pruebas).
+2. `blackbox.test.js`: Ciclo de vida del servidor HTTP real, procesos independientes, CSRF y persistencia (1 prueba).
+3. `tp02_ingestion_and_extraction.test.js`: Ingesta, idempotencia, IA estructurada, deduplicación y resiliencia (11 pruebas).
+4. `tp03_triage_and_drafts.test.js`: Versionado de hechos, borradores STALE, bloqueo 409 y portapapeles (21 pruebas).
+5. `tp04_endpoints_and_workflow.test.js`: Operadores, acciones, vencimientos y filtros (2 pruebas).
+6. `tp04_review_corrections.test.js`: Migración segura sin rotura de FKs, DST Santiago y exportación agrupada (6 pruebas).
+7. `tp05_integration_and_operational_summary.test.js`: Resumen operativo real, resiliencia manual y reinicio sintético por ADMIN (8 pruebas).
 
 ---
 
