@@ -152,7 +152,15 @@ test('TP-04 Endpoints: Operadores, creación de acciones, completar y cancelar',
     assert.equal(lead.status, 'PENDING_TRIAGE');
 
     // 3. POST /api/leads/:id/actions - Assign first action
-    const tomorrowSantiagoIso = '2026-09-24T18:00:00'; // Wall-clock without timezone
+    // Future date in America/Santiago at noon (12:00:00) to ensure future status without DST ambiguity
+    const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const santiagoDateStr = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Santiago',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(futureDate);
+    const tomorrowSantiagoIso = `${santiagoDateStr}T12:00:00`; // Wall-clock without timezone
     const createRes = await invokeApp(app, {
       method: 'POST',
       url: `/api/leads/${lead.id}/actions`,
@@ -192,7 +200,7 @@ test('TP-04 Endpoints: Operadores, creación de acciones, completar y cancelar',
     assert.equal(duplicateActionRes.body.code, 'ACTIVE_ACTION_EXISTS');
 
     // 5. POST /api/leads/:id/actions/:actionId/complete - Complete with commercial result and chain next action
-    const nextDueDateIso = '2026-09-25T15:00:00Z';
+    const nextDueDateIso = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
     const completeRes = await invokeApp(app, {
       method: 'POST',
       url: `/api/leads/${lead.id}/actions/${createRes.body.action.id}/complete`,
