@@ -4,9 +4,9 @@
 - **Change Evaluado**: `CHG-001` (MVP de Captura y Seguimiento Comercial con IA para NoosAdvisory bajo Ruta A)
 - **Fecha de Evaluación**: `2026-09-29`
 - **Owner**: `ORCHESTRATOR_PM`
-- **Línea Base Evaluada**: `356ed73` en la rama `main`
+- **Línea Base Evaluada**: `0be9c52` en la rama `main` (rectificada en `d997158` tras saneamiento de historia)
 - **Ambiente Objetivo**: `DEV` (`http://localhost:3000`, macOS local)
-- **Resultado Formal**: **`RELEASE_NOT_READY`** (Bloqueo preventivo de publicación por hallazgo de credenciales en historia Git)
+- **Resultado Formal**: **`RELEASE_NOT_READY`** (Bloqueo preventivo de publicación remota hasta decisión de rotación de credenciales locales)
 
 ---
 
@@ -14,13 +14,15 @@
 
 - [x] **Repositorio Confirmado**: `noos-sales-flow`
 - [x] **Rama Activa**: `main`
-- [x] **HEAD Evaluado**: `356ed73`
+- [x] **HEAD Evaluado**: `0be9c52` (rectificado en `d997158`)
 - [x] **Árbol de Trabajo**: Limpio tras corrección documental
-- [!] **Auditoría de Secretos y Credenciales en Historia Git (`RELEASE_NOT_READY` para Push Remoto)**:
-  - **Hallazgo Crítico:** La revisión independiente detectó que en el commit `b8b1c08` se introdujeron en [`docs/operations/GUIA_ARRANQUE_LOCAL.md`](file:///Users/miguelulloa/Documents/GitHub/noos-sales-flow/docs/operations/GUIA_ARRANQUE_LOCAL.md) valores literales para una variable innecesaria `SESSION_SECRET` y contraseñas operacionales de ejemplo presentadas como "por defecto" para los roles `ADMIN` y `OPERATOR`.
-  - **Incumplimiento:** Esto contradice la directriz de TP-01 ("ninguna contraseña inicial se escribe en código ni en Git") y las buenas prácticas de higiene previa a la primera publicación remota.
-  - **Estado Actual del Archivo:** En el árbol de trabajo actual, los valores han sido eliminados y reemplazados por campos vacíos con instrucciones de definición local obligatoria.
-  - **Persistencia en Historia Local:** Dichos valores continúan presentes en los commits alcanzables desde `b8b1c08` en el historial local de Git. Dado que el repositorio remoto en GitHub (`origin`) está actualmente vacío y no ha recibido ningún `push`, los valores no han sido expuestos públicamente, pero deben ser considerados comprometidos antes de autorizar cualquier sincronización remota.
+- [x] **Auditoría de Higiene y Saneamiento de Historia Git (`PASS` en historia alcanzable)**:
+  - **Saneamiento Histórico Ejecutado:** Mediante rebase interactivo local controlado autorizado por el Sponsor, se reescribieron los 11 commits locales desde el commit inicial de TP-05 (`45939fe`, anteriormente `b8b1c08`). En la versión histórica de [`docs/operations/GUIA_ARRANQUE_LOCAL.md`](file:///Users/miguelulloa/Documents/GitHub/noos-sales-flow/docs/operations/GUIA_ARRANQUE_LOCAL.md) se eliminó la asignación literal de `SESSION_SECRET`, se vaciaron las contraseñas operacionales de inicialización y se eliminó toda presentación de contraseñas por defecto.
+  - **Certificación de Historia Alcanzable:** Se auditó todo el grafo alcanzable desde `main`. No existe presencia de secretos de sesión, claves de API reales, claves privadas ni contraseñas operacionales. Los únicos valores permitidos son fixtures sintéticos confinados a pruebas automatizadas.
+  - **Respaldo Recuperable:** Se generó y verificó un bundle local completo en `/Users/miguelulloa/Documents/GitHub/noos-sales-flow-pre-sanitization-d6b2e9c.bundle` clasificado como sensible y no versionado.
+- [!] **Estado de Publicación Remota (`RELEASE_NOT_READY` para Push Remoto)**:
+  - **Bloqueo Preventivo Vigente:** Si bien el árbol y el historial alcanzable de Git están 100% limpios y verificados, la publicación remota a GitHub continúa bloqueada (`RELEASE_NOT_READY`) hasta que el Sponsor decida y autorice la rotación de las contraseñas de las cuentas de usuario existentes en la base de datos local SQLite.
+  - **Comportamiento de `init-db`:** Se certifica que `npm run init-db` **no rota contraseñas existentes**; únicamente crea las cuentas cuando no existen previamente. Por ende, la rotación de credenciales locales existentes no puede realizarse con `init-db` y debe ejecutarse mediante un procedimiento técnico específico.
 
 ---
 
@@ -43,9 +45,10 @@
 ### 2.5 CI / Build / Controles Requeridos (`DEFERRED` Justificado bajo Ruta A)
 - Clasificado como `DEFERRED` justificado bajo el perfil de riesgo de la Ruta A para desarrollo local.
 
-### 2.6 Seguridad, Gestión de Riesgos e Higiene de Repositorio (`BLOCKED_FOR_REMOTE_PUSH`)
+### 2.6 Seguridad, Gestión de Riesgos e Higiene de Repositorio (`PARTIAL` — Bloqueo Preventivo de Push Remoto)
 - Los riesgos de datos en reset sintético, inyección de prompts y estados STALE de borradores están resueltos y verificados con pruebas.
-- **Bloqueo de Release:** La presencia de contraseñas de inicialización en el historial de Git desde `b8b1c08` impide declarar el repositorio apto para publicación remota pública o compartida (`RELEASE_NOT_READY`).
+- **Higiene de Historia Git:** Certificada como limpia (`PASS`) en todas las referencias alcanzables desde `main` tras el rebase interactivo controlado.
+- **Bloqueo de Release / Push Remoto:** Se mantiene el bloqueo preventivo de publicación remota (`RELEASE_NOT_READY`) exclusivamente a la espera de la decisión del Sponsor sobre la rotación de contraseñas de las cuentas locales existentes en SQLite.
 - **Riesgo Operacional de IA:** Se mantiene registrado el riesgo de agotamiento de cuota diaria en Gemini API (Free Tier), mitigado por la ruta de contingencia manual (`MVP-11`).
 
 ### 2.7 Evidencia Durable y Reproducible (`PASS`)
@@ -81,7 +84,8 @@
    - Exclusivo para demostración comercial en DEV local (`http://localhost:3000`). Servicios GCP en `DEFERRED`.
 3. **Significado del Dictamen `RELEASE_NOT_READY`:**
    - La funcionalidad y calidad técnica del software están aprobadas al 100% (56/56 tests, 18/18 QA).
-   - El estado `RELEASE_NOT_READY` responde estrictamente a la **higiene de seguridad del repositorio Git previa a su publicación**: no se autoriza `git push` a un repositorio remoto hasta que el Sponsor decida la estrategia de saneamiento de la historia Git y la rotación de credenciales locales.
+   - El historial de Git en `main` ha sido completamente saneado de credenciales operacionales preconfiguradas.
+   - El estado `RELEASE_NOT_READY` responde estrictamente a la **pendiente rotación de contraseñas de las cuentas locales existentes en SQLite**: no se autoriza `git push` a un repositorio remoto hasta que el Sponsor apruebe el procedimiento técnico de rotación correspondiente.
 
 ---
 
@@ -89,4 +93,4 @@
 
 **`RELEASE_NOT_READY`**
 
-Se suspende la autorización de publicación remota (`git push`), despliegue o cierre de CHG-001 hasta que el Sponsor evalúe y decida sobre el saneamiento del historial local de Git.
+Se suspende la autorización de publicación remota (`git push`), despliegue o cierre de CHG-001 hasta que el Sponsor evalúe y decida sobre el procedimiento de rotación de contraseñas para los usuarios locales existentes.

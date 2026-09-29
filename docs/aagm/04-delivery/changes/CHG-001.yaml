@@ -38,9 +38,9 @@ commits_or_prs:
   - "0686aaf (feat(tracking): implement TP-04 commercial tracking, inbox filters, timezone and safe exports)"
   - "3ec5b2a (fix(tracking): preserve foreign keys and validate DST-safe exports)"
   - "254c4ef (docs(governance): accept TP-04 and authorize TP-05)"
-  - "b8b1c08 (feat(tp05): implement end-to-end integration, operational summary, and demo readiness)"
-  - "59c9d13 (feat(tp05): fix synthetic reset isolation, server confirmation and draft lifecycle)"
-  - "5392255 (test(tp04): dinamizar fechas limites a futuro en prueba de workflow)"
+  - "45939fe (feat(tp05): implement end-to-end integration, operational summary, and demo readiness)"
+  - "2e3ec1d (feat(tp05): fix synthetic reset isolation, server confirmation and draft lifecycle)"
+  - "2270c09 (test(tp04): dinamizar fechas limites a futuro en prueba de workflow)"
 evidence:
   - "docs/aagm/02-solution-design/EV-003-solution-design.md"
   - "docs/aagm/03-planning/EV-004-planning.md"

@@ -5,7 +5,7 @@
 - **Ambiente**: `DEV_LOCAL` (Node.js v24.14.1, SQLite nativo `node:sqlite`, Express 5, Google Gemini API, Navegador Google Chrome real automatizado, macOS)
 - **Task Packet**: `TP-05` (`docs/aagm/04-delivery/task-packets/TP-05.md`)
 - **Candidato de código evaluado**:
-  - Commits de implementación: `b8b1c08` (implementación integral) y `59c9d13` (corrección de aislamiento sintético, confirmación en servidor y ciclo de vida de borradores).
+  - Commits de implementación: `45939fe` (implementación integral) y `2e3ec1d` (corrección de aislamiento sintético, confirmación en servidor y ciclo de vida de borradores).
   - Resumen Operativo en tiempo real basado exclusivamente en datos reales de SQLite (`MVP-10` / `getOperationalSummary`).
   - Ruta de contingencia y continuidad manual para redacción comercial ante indisponibilidad, cuota agotada o fallos de Gemini (`MVP-11` / `POST /api/leads/:id/drafts/manual`).
   - Persistencia total y recuperación completa tras detención y reinicio del servidor (`MVP-12`).

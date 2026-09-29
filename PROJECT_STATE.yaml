@@ -67,8 +67,8 @@ authorization:
   notes: "Validación independiente completada con 18/18 escenarios PASS (Gemini 3.6 Flash real validado). Portapapeles validado en Chrome real. Suite en 56/56 PASS."
   expires_on_scope_change: true
 next_action:
-  sponsor: "Evaluar estrategia de saneamiento del historial Git y rotación de contraseñas locales antes de autorizar git push."
-  internal: AWAITING_GIT_HISTORY_SANITIZATION_DECISION
+  sponsor: "Decidir y autorizar procedimiento técnico de rotación de credenciales para usuarios existentes antes de autorizar git push."
+  internal: AWAITING_LOCAL_CREDENTIALS_ROTATION_DECISION
 dashboard:
   sync_status: SYNCED
-  last_synced_at: "2026-09-29T09:30:00-03:00"
+  last_synced_at: "2026-09-29T14:35:00-03:00"
