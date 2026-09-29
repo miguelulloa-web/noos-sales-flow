@@ -10,6 +10,7 @@
   "scripts": {
     "start": "node src/server.js",
     "init-db": "node scripts/init-db.js",
+    "rotate-password": "node scripts/rotate-local-user-password.js",
     "test": "node --test tests/*.test.js"
   },
   "bugs": {

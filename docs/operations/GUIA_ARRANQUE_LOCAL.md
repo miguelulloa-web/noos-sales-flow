@@ -120,11 +120,32 @@ Abra su navegador en: **`http://localhost:3000`**
 | **ADMIN** | `admin@noosadvisory.com` | *Definida localmente en `.env` durante `npm run init-db`* | Triage comercial, confirmación de hechos, borrador, seguimiento, auditoría completa y **reinicio controlado de datos de prueba (`MVP-13`)**. |
 | **OPERATOR** | `operador@noosadvisory.com` | *Definida localmente en `.env` durante `npm run init-db`* | Ingesta, triage, confirmación de hechos, generación de borradores, copia y gestión de acciones comerciales. |
 
+### Rotación Segura de Contraseñas de Usuarios Existentes
+
+Para actualizar o rotar la contraseña de una cuenta existente en SQLite sin tocar datos comerciales ni historial:
+
+```bash
+npm run rotate-password -- <correo_usuario>
+```
+
+Ejemplos:
+```bash
+npm run rotate-password -- admin@noosadvisory.com
+npm run rotate-password -- operador@noosadvisory.com
+```
+
+> **IMPORTANTE:**
+> * `npm run init-db` **no rota contraseñas existentes**; su función es idempotente y preserva los usuarios ya creados.
+> * `npm run rotate-password` exige una sesión interactiva TTY y solicita la nueva contraseña (mínimo 12 caracteres) de forma oculta en la terminal.
+> * Las contraseñas nunca deben pasarse como argumentos de línea de comandos.
+> * La rotación revoca atómicamente todas las sesiones activas del usuario en `auth_sessions` y registra un evento append-only en `audit_log` (`USER_PASSWORD_ROTATED`) sin registrar datos sensibles.
+> * Se preservan íntegros todos los leads, hechos confirmados, borradores, acciones y logs históricos.
+
 ---
 
 ## 7. Ejecución de la Suite Completa de Pruebas
 
-Para ejecutar las 56 pruebas automatizadas de regresión, integración y gobernanza:
+Para ejecutar las 65 pruebas automatizadas de regresión, integración y gobernanza:
 
 ```bash
 npm test
@@ -138,6 +159,7 @@ La suite cubre:
 5. `tp04_endpoints_and_workflow.test.js`: Operadores, acciones, vencimientos y filtros (2 pruebas).
 6. `tp04_review_corrections.test.js`: Migración segura sin rotura de FKs, DST Santiago y exportación agrupada (6 pruebas).
 7. `tp05_integration_and_operational_summary.test.js`: Resumen operativo real, resiliencia manual y reinicio sintético por ADMIN (8 pruebas).
+8. `password_rotation.test.js`: Rotación transaccional de contraseñas, revocación de sesiones, auditoría sin secretos y aislamiento (9 pruebas).
 
 ---
 

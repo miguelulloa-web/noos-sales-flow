@@ -58,4 +58,4 @@ release: null
 release_gate: RELEASE_NOT_READY
 environment: DEV
 production_validation_ref: null
-next_action: "Release Gate emitido como RELEASE_NOT_READY debido a hallazgo de credenciales operacionales en historia Git. A la espera de decisión del Sponsor sobre saneamiento previo a push."
+next_action: "Saneamiento de historia completado. Mecanismo de rotación transaccional implementado y verificado (65/65 tests PASS). Release Gate en RELEASE_NOT_READY a la espera de ejecución interactiva de rotación de contraseñas de cuentas locales existentes antes de push remoto."

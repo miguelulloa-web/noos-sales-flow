@@ -322,6 +322,80 @@ export function getUserByEmail(email, db = getDb()) {
   return db.prepare('SELECT id, name, email, password_hash, role, is_active, created_at FROM users WHERE email = ?').get(email.toLowerCase().trim()) || null;
 }
 
+/**
+ * Transactionally rotate an existing user's password hash and revoke all their active sessions.
+ * Appends an audit event to audit_log without storing passwords, hashes, or tokens.
+ *
+ * @param {object} params
+ * @param {string} params.email
+ * @param {string} params.newPasswordHash
+ * @param {string} [params.actorUserId='LOCAL_MAINTENANCE_CLI']
+ * @param {object} [db=getDb()]
+ * @returns {{ userId: string, email: string, revokedSessionsCount: number, timestamp: string, auditLogId: string }}
+ */
+export function rotateUserPassword({ email, newPasswordHash, actorUserId = 'LOCAL_MAINTENANCE_CLI' }, db = getDb()) {
+  const normalizedEmail = (email || '').toLowerCase().trim();
+  if (!normalizedEmail) {
+    throw new Error('Email is required for password rotation');
+  }
+  if (!newPasswordHash || typeof newPasswordHash !== 'string' || !newPasswordHash.startsWith('$2')) {
+    throw new Error('Valid bcrypt password hash is required for password rotation');
+  }
+
+  const user = getUserByEmail(normalizedEmail, db);
+  if (!user) {
+    throw new Error(`User with email "${normalizedEmail}" not found`);
+  }
+
+  db.exec('BEGIN IMMEDIATE;');
+  try {
+    const now = new Date().toISOString();
+
+    // 1. Update password hash exclusively
+    db.prepare(`
+      UPDATE users
+      SET password_hash = ?
+      WHERE id = ?
+    `).run(newPasswordHash, user.id);
+
+    // 2. Revoke all active sessions for this user in auth_sessions
+    const revokeResult = db.prepare(`
+      UPDATE auth_sessions
+      SET revoked_at = ?
+      WHERE user_id = ? AND revoked_at IS NULL
+    `).run(now, user.id);
+
+    const revokedSessionsCount = revokeResult.changes;
+
+    // 3. Register exactly one append-only audit event in audit_log
+    const auditResult = appendAuditLog({
+      leadId: null,
+      eventType: 'USER_PASSWORD_ROTATED',
+      entityType: 'USER',
+      entityId: user.id,
+      previousState: null,
+      newState: {
+        revoked_sessions_count: revokedSessionsCount,
+        timestamp: now
+      },
+      actorUserId: actorUserId || 'LOCAL_MAINTENANCE_CLI'
+    }, db);
+
+    db.exec('COMMIT;');
+
+    return {
+      userId: user.id,
+      email: user.email,
+      revokedSessionsCount,
+      timestamp: now,
+      auditLogId: auditResult.id
+    };
+  } catch (err) {
+    db.exec('ROLLBACK;');
+    throw err;
+  }
+}
+
 // Session repository functions
 export function createSession({ userId, sessionTokenHash, durationHours = 24 }, db = getDb()) {
   const id = crypto.randomUUID();
