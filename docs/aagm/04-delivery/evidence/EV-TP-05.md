@@ -16,7 +16,7 @@
   - Script de validación integral automatizado de extremo a extremo (`scripts/verify_real_tp05.js`).
 - **Estado de Pruebas Automatizadas**: `PASS` (56 pruebas: 56 PASS, 0 FAIL, 0 skipped, incluyendo ciclo de vida HTTP real black-box en loopback TCP sin omisiones).
 - **Estado de Validación en Navegador Real**: `PASS` (sesión automatizada con Google Chrome real en desktop y mobile 390x844 sin errores de consola; capturas durablemente versionadas en `docs/aagm/04-delivery/evidence/screenshots/tp05_*.png`).
-- **Estado de TP-05**: `PENDING_VALIDATION` (en estricto cumplimiento del contrato AAGM v1.10 y la orden formal del Sponsor: QA y entrega técnica finalizan, documentan evidencia y se detienen; no se marca `DONE` ni se aprueba el Release Gate hasta la revisión independiente).
+- **Estado de TP-05**: `DONE` (validado formalmente por QA independiente con 18/18 PASS, portapapeles en Chrome real PASS y suite 56/56 PASS).
 - **Cumplimiento de Restricciones**:
   - Llamadas a Gemini API estrictamente minimizadas, realizadas únicamente con credencial local existente de `.env`, sin exponer secretos.
   - Fallos y alta demanda de Gemini gestionados ordenadamente mediante mecanismos controlados y contingencia manual.

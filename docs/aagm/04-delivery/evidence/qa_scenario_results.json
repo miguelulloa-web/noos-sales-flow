@@ -3,9 +3,9 @@
     "id": "ESC-01",
     "name": "Ingesta de Solicitud Comercial Nueva sin precarga previa",
     "method": "HTTP_POST_API",
-    "startedAt": "2026-09-24T01:00:02.349Z",
-    "finishedAt": "2026-09-24T01:00:03.416Z",
-    "durationMs": 1067,
+    "startedAt": "2026-09-29T00:37:37.117Z",
+    "finishedAt": "2026-09-29T00:37:46.301Z",
+    "durationMs": 9184,
     "status": "PASS",
     "assertions": [
       "PASS: Endpoint responde HTTP 201 Created para ingesta sin análisis [201 === 201]",
@@ -15,82 +15,106 @@
       "PASS: Endpoint responde HTTP 201 Created para lead principal [201 === 201]",
       "PASS: Retorna objeto lead con ID UUID válido",
       "PASS: El lead principal se cataloga con source = MANUAL [MANUAL === MANUAL]",
-      "PASS: Lead principal registrado en estado válido: PENDING_TRIAGE",
+      "PASS: Lead principal registrado en estado válido: IN_REVIEW",
       "PASS: Hash SHA-256 generado y almacenado"
     ],
     "evidenceRefs": [
-      "Lead ID: 0068fb58-b128-48fc-8ac0-04bd31b81257",
-      "Initial: PENDING_TRIAGE -> Analyzed: PENDING_TRIAGE"
+      "Lead ID: 1c983efc-3bf8-43cf-8143-aae3a10cf08a",
+      "Initial: PENDING_TRIAGE -> Analyzed: IN_REVIEW"
     ]
   },
   {
     "id": "ESC-02",
     "name": "Clasificación Comercial vs No Comercial",
     "method": "HTTP_POST_API",
-    "startedAt": "2026-09-24T01:00:03.416Z",
-    "finishedAt": "2026-09-24T01:00:03.690Z",
-    "durationMs": 274,
-    "status": "BLOCKED",
-    "reasonCode": "BLOCKED_BY_QUOTA",
-    "error": "Gemini no completó la clasificación por agotamiento de cuota (QUOTA_EXCEEDED): Cuota agotada en Google Gemini API (HTTP 429 Too Many Requests)",
+    "startedAt": "2026-09-29T00:37:46.302Z",
+    "finishedAt": "2026-09-29T00:37:53.248Z",
+    "durationMs": 6946,
+    "status": "PASS",
     "assertions": [
       "PASS: Endpoint responde 201 [201 === 201]",
       "PASS: Lead no comercial ingresado sin fallar",
-      "PASS: Registro de extracción generado en DB"
+      "PASS: Registro de extracción generado en DB",
+      "PASS: Extracción exitosa por Gemini [SUCCESS === SUCCESS]",
+      "PASS: Clasificado correctamente como NO comercial (is_commercial = 0) [0 === 0]"
     ],
     "evidenceRefs": [
-      "{\"status\":\"QUOTA_EXCEEDED\",\"error\":\"Cuota agotada en Google Gemini API (HTTP 429 Too Many Requests)\"}"
+      "Lead no comercial ID: f6406cb4-cd69-44ed-94b3-952633466f3d",
+      "is_commercial: 0"
     ]
   },
   {
     "id": "ESC-03",
     "name": "Tratamiento de Texto como Contenido No Confiable",
     "method": "HTTP_POST_API",
-    "startedAt": "2026-09-24T01:00:03.691Z",
-    "finishedAt": "2026-09-24T01:00:04.513Z",
-    "durationMs": 822,
-    "status": "BLOCKED",
-    "reasonCode": "BLOCKED_BY_QUOTA",
-    "error": "Gemini no procesó la inyección por agotamiento de cuota (QUOTA_EXCEEDED): Cuota agotada en Google Gemini API (HTTP 429 Too Many Requests)",
+    "startedAt": "2026-09-29T00:37:53.248Z",
+    "finishedAt": "2026-09-29T00:37:58.036Z",
+    "durationMs": 4788,
+    "status": "PASS",
     "assertions": [
       "PASS: Endpoint maneja la inyección sin romperse respondiendo 201 [201 === 201]",
       "PASS: Lead con inyección creado",
-      "PASS: Extracción persistida"
+      "PASS: Extracción persistida",
+      "PASS: Extracción completada exitosamente por Gemini [SUCCESS === SUCCESS]",
+      "PASS: Campo estructurado no materializa instrucción maliciosa ('100%')",
+      "PASS: Campo estructurado no materializa instrucción maliciosa ('descuento')",
+      "PASS: Campo estructurado no materializa instrucción maliciosa ('aprueba')",
+      "PASS: Campo estructurado no materializa instrucción maliciosa ('aprobado')",
+      "PASS: Campo estructurado no materializa instrucción maliciosa ('ignora todas')",
+      "PASS: Campo estructurado no materializa instrucción maliciosa ('evil corp')",
+      "PASS: scope_summary contiene un resumen legítimo y no nulo"
     ],
     "evidenceRefs": [
-      "{\"status\":\"QUOTA_EXCEEDED\",\"error\":\"Cuota agotada en Google Gemini API (HTTP 429 Too Many Requests)\"}"
+      "Prompt isolation verificado contra inyección maliciosa",
+      "Status: SUCCESS"
     ]
   },
   {
     "id": "ESC-04",
     "name": "Extracción Estructurada con Citas Verbatim",
     "method": "DATABASE_AND_EXTRACTION",
-    "startedAt": "2026-09-24T01:00:04.513Z",
-    "finishedAt": "2026-09-24T01:00:04.516Z",
-    "durationMs": 3,
-    "status": "BLOCKED",
-    "reasonCode": "BLOCKED_BY_QUOTA",
-    "error": "Extracción de Gemini bloqueada por cuota (QUOTA_EXCEEDED): Cuota agotada en Google Gemini API (HTTP 429 Too Many Requests)",
+    "startedAt": "2026-09-29T00:37:58.036Z",
+    "finishedAt": "2026-09-29T00:37:58.042Z",
+    "durationMs": 6,
+    "status": "PASS",
     "assertions": [
       "PASS: Lead principal existe en base de datos",
-      "PASS: Extracción de lead principal existe en base de datos"
+      "PASS: Extracción de lead principal existe en base de datos",
+      "PASS: Extracción completada exitosamente [SUCCESS === SUCCESS]",
+      "PASS: Existe al menos una evidencia estructurada extraída (total: 7)",
+      "PASS: La cita para contact_name no es vacía",
+      "PASS: La cita para contact_name es una subcadena exacta del texto original",
+      "PASS: La cita para company_name no es vacía",
+      "PASS: La cita para company_name es una subcadena exacta del texto original",
+      "PASS: La cita para contact_email no es vacía",
+      "PASS: La cita para contact_email es una subcadena exacta del texto original",
+      "PASS: La cita para contact_phone no es vacía",
+      "PASS: La cita para contact_phone es una subcadena exacta del texto original",
+      "PASS: La cita para urgency no es vacía",
+      "PASS: La cita para urgency es una subcadena exacta del texto original",
+      "PASS: La cita para scope_summary no es vacía",
+      "PASS: La cita para scope_summary es una subcadena exacta del texto original",
+      "PASS: La cita para request_type no es vacía",
+      "PASS: La cita para request_type es una subcadena exacta del texto original"
     ],
     "evidenceRefs": [
-      "{\"status\":\"QUOTA_EXCEEDED\",\"error\":\"Cuota agotada en Google Gemini API (HTTP 429 Too Many Requests)\"}"
+      "Extraction Status: SUCCESS",
+      "Model: gemini-3.6-flash",
+      "Evidence count: 7"
     ]
   },
   {
     "id": "ESC-05",
     "name": "Idempotencia Estricta ante Reintentos",
     "method": "HTTP_POST_IDEMPOTENCY",
-    "startedAt": "2026-09-24T01:00:04.516Z",
-    "finishedAt": "2026-09-24T01:00:04.520Z",
-    "durationMs": 4,
+    "startedAt": "2026-09-29T00:37:58.042Z",
+    "finishedAt": "2026-09-29T00:37:58.053Z",
+    "durationMs": 11,
     "status": "PASS",
     "assertions": [
       "PASS: Reintento exacto responde HTTP 200 (Replay) [200 === 200]",
       "PASS: Cabecera X-Idempotent-Replay es true [true === true]",
-      "PASS: Devuelve el mismo ID del lead sin crear uno nuevo [0068fb58-b128-48fc-8ac0-04bd31b81257 === 0068fb58-b128-48fc-8ac0-04bd31b81257]"
+      "PASS: Devuelve el mismo ID del lead sin crear uno nuevo [1c983efc-3bf8-43cf-8143-aae3a10cf08a === 1c983efc-3bf8-43cf-8143-aae3a10cf08a]"
     ],
     "evidenceRefs": [
       "Header X-Idempotent-Replay verificado"
@@ -100,9 +124,9 @@
     "id": "ESC-06",
     "name": "Confirmación Humana de Hechos y Versionado",
     "method": "HTTP_POST_FACTS",
-    "startedAt": "2026-09-24T01:00:04.520Z",
-    "finishedAt": "2026-09-24T01:00:04.536Z",
-    "durationMs": 16,
+    "startedAt": "2026-09-29T00:37:58.053Z",
+    "finishedAt": "2026-09-29T00:37:58.072Z",
+    "durationMs": 19,
     "status": "PASS",
     "assertions": [
       "PASS: Hechos v1 creados con HTTP 201 [201 === 201]",
@@ -114,16 +138,16 @@
       "PASS: v1 fue archivada con is_current = 0 manteniendo historial [0 === 0]"
     ],
     "evidenceRefs": [
-      "Facts v1 ID: e86cfef2-3e09-4a2a-968a-de4244822faf",
-      "Facts v2 ID: 6149d39d-1d20-4b25-8a04-380c483cd3b7"
+      "Facts v1 ID: 522c0ddd-ac50-489e-a52d-612f6635096e",
+      "Facts v2 ID: 4ef7ae3d-7cb1-4a54-816a-35608cc43833"
     ]
   },
   {
     "id": "ESC-07",
     "name": "Auditoría Inmutable Append-Only",
     "method": "SQLITE_TRIGGERS",
-    "startedAt": "2026-09-24T01:00:04.536Z",
-    "finishedAt": "2026-09-24T01:00:04.537Z",
+    "startedAt": "2026-09-29T00:37:58.072Z",
+    "finishedAt": "2026-09-29T00:37:58.073Z",
     "durationMs": 1,
     "status": "PASS",
     "assertions": [
@@ -138,33 +162,38 @@
     "id": "ESC-08",
     "name": "Generación Supervisada de Borrador con Gemini",
     "method": "HTTP_POST_DRAFT_GENERATE",
-    "startedAt": "2026-09-24T01:00:04.537Z",
-    "finishedAt": "2026-09-24T01:00:04.810Z",
-    "durationMs": 273,
-    "status": "BLOCKED",
-    "reasonCode": "BLOCKED_BY_QUOTA",
-    "error": "Generación con Gemini bloqueada por cuota o indisponibilidad (HTTP 429): Cuota de Google Gemini API agotada (HTTP 429)",
-    "assertions": [],
+    "startedAt": "2026-09-29T00:37:58.073Z",
+    "finishedAt": "2026-09-29T00:38:04.125Z",
+    "durationMs": 6052,
+    "status": "PASS",
+    "assertions": [
+      "PASS: Borrador generado con IA exitosamente",
+      "PASS: Estado inicial del borrador es GENERATED [GENERATED === GENERATED]",
+      "PASS: Generado con modelo autorizado gemini-3.6-flash [gemini-3.6-flash === gemini-3.6-flash]",
+      "PASS: Texto inicial del borrador generado no es vacío",
+      "PASS: Borrador vinculado a hechos confirmados vigentes v2 [2 === 2]"
+    ],
     "evidenceRefs": [
-      "{\"status\":429,\"error\":{\"error\":\"Cuota de Google Gemini API agotada (HTTP 429)\",\"code\":\"QUOTA_EXCEEDED\"}}"
+      "Generated Draft ID: d811b5e4-0a9c-46b3-b0d4-6dbb25282c26"
     ]
   },
   {
     "id": "ESC-09",
     "name": "Continuidad Manual ante Fallos o Cuota de IA",
     "method": "HTTP_POST_MANUAL_DRAFT",
-    "startedAt": "2026-09-24T01:00:04.810Z",
-    "finishedAt": "2026-09-24T01:00:04.819Z",
-    "durationMs": 9,
+    "startedAt": "2026-09-29T00:38:04.125Z",
+    "finishedAt": "2026-09-29T00:38:04.151Z",
+    "durationMs": 26,
     "status": "PASS",
     "assertions": [
       "PASS: Endpoint manual draft responde HTTP 201 Created [201 === 201]",
       "PASS: Borrador manual creado",
       "PASS: Estado de borrador manual es EDITED [EDITED === EDITED]",
-      "PASS: edited_text persistido correctamente (no null)"
+      "PASS: edited_text persistido correctamente (no null)",
+      "PASS: Borrador anterior fue invalidado atómicamente a DISCARDED [DISCARDED === DISCARDED]"
     ],
     "evidenceRefs": [
-      "Manual Draft ID: 1bba4cd4-e0f7-4524-a731-e1593cc0f3e9",
+      "Manual Draft ID: 91336180-2068-41f8-95c8-4bf5066f828b",
       "Status: EDITED"
     ]
   },
@@ -172,11 +201,12 @@
     "id": "ESC-10",
     "name": "Flujo Seguro de Portapapeles (Authorize -> Confirm)",
     "method": "PLAYWRIGHT_CHROME_REAL_CLIPBOARD",
-    "startedAt": "2026-09-24T01:00:04.826Z",
-    "finishedAt": "2026-09-24T01:00:13.566Z",
-    "durationMs": 8740,
+    "startedAt": "2026-09-29T00:38:04.159Z",
+    "finishedAt": "2026-09-29T00:38:13.971Z",
+    "durationMs": 9812,
     "status": "PASS",
     "assertions": [
+      "PASS: Borrador descartado es rechazado en copy-authorize con HTTP 409 Conflict [409 === 409]",
       "PASS: Borrador cargado en UI con texto válido",
       "PASS: Botón #btnCopyDraft está habilitado para el borrador vigente",
       "PASS: copy-confirm respondió HTTP 200 OK [200 === 200]",
@@ -192,15 +222,15 @@
     "evidenceRefs": [
       "Google Chrome real: clic en #btnCopyDraft ejecutado",
       "navigator.clipboard.writeText y readText validados con concordancia exacta",
-      "Evento único DRAFT_COPIED verificado en audit_log (audit_id=2f99d0f4-977b-44a1-b94d-e4ca0b10ab81)"
+      "Evento único DRAFT_COPIED verificado en audit_log (audit_id=18a48f39-740e-4196-bcd3-f8b761c53825)"
     ]
   },
   {
     "id": "ESC-11",
     "name": "Edición Manual y Trazabilidad del Borrador",
     "method": "HTTP_PATCH_DRAFT",
-    "startedAt": "2026-09-24T01:00:04.819Z",
-    "finishedAt": "2026-09-24T01:00:04.826Z",
+    "startedAt": "2026-09-29T00:38:04.151Z",
+    "finishedAt": "2026-09-29T00:38:04.158Z",
     "durationMs": 7,
     "status": "PASS",
     "assertions": [
@@ -217,9 +247,9 @@
     "id": "ESC-12",
     "name": "Asignación y Ciclo de Vida de Acciones Comerciales",
     "method": "HTTP_ACTIONS_LIFECYCLE",
-    "startedAt": "2026-09-24T01:00:13.567Z",
-    "finishedAt": "2026-09-24T01:00:13.685Z",
-    "durationMs": 118,
+    "startedAt": "2026-09-29T00:38:13.972Z",
+    "finishedAt": "2026-09-29T00:38:14.057Z",
+    "durationMs": 85,
     "status": "PASS",
     "assertions": [
       "PASS: Acción creada con HTTP 201 [201 === 201]",
@@ -229,7 +259,7 @@
       "PASS: Acción transiciona a COMPLETED [COMPLETED === COMPLETED]"
     ],
     "evidenceRefs": [
-      "Action ID: 911d8d53-064a-4bb2-b582-8702fb741daa",
+      "Action ID: cabd3066-ab4e-4c3e-b113-c851ab714eb1",
       "Unicidad de acción abierta verificada"
     ]
   },
@@ -237,9 +267,9 @@
     "id": "ESC-13",
     "name": "Zona Horaria y Vencimientos en Santiago",
     "method": "UNIT_TIME_SERVICE",
-    "startedAt": "2026-09-24T01:00:13.685Z",
-    "finishedAt": "2026-09-24T01:00:13.735Z",
-    "durationMs": 50,
+    "startedAt": "2026-09-29T00:38:14.057Z",
+    "finishedAt": "2026-09-29T00:38:14.094Z",
+    "durationMs": 37,
     "status": "PASS",
     "assertions": [
       "PASS: Conversión a UTC termina en Z",
@@ -253,9 +283,9 @@
     "id": "ESC-14",
     "name": "Bandeja de Triage con Filtros y Búsqueda",
     "method": "HTTP_GET_INBOX_FILTERS",
-    "startedAt": "2026-09-24T01:00:13.735Z",
-    "finishedAt": "2026-09-24T01:00:13.744Z",
-    "durationMs": 9,
+    "startedAt": "2026-09-29T00:38:14.094Z",
+    "finishedAt": "2026-09-29T00:38:14.099Z",
+    "durationMs": 5,
     "status": "PASS",
     "assertions": [
       "PASS: Filtro status=RESPONDED responde 200 [200 === 200]",
@@ -271,9 +301,9 @@
     "id": "ESC-15",
     "name": "Resumen Operativo Real sin Ficción",
     "method": "HTTP_OPERATIONAL_SUMMARY",
-    "startedAt": "2026-09-24T01:00:13.744Z",
-    "finishedAt": "2026-09-24T01:00:13.754Z",
-    "durationMs": 10,
+    "startedAt": "2026-09-29T00:38:14.099Z",
+    "finishedAt": "2026-09-29T00:38:14.101Z",
+    "durationMs": 2,
     "status": "PASS",
     "assertions": [
       "PASS: Resumen operativo responde 200 [200 === 200]",
@@ -292,9 +322,9 @@
     "id": "ESC-16",
     "name": "Administración de Datos Sintéticos con Aislamiento y Confirmación",
     "method": "HTTP_ADMIN_RESET",
-    "startedAt": "2026-09-24T01:00:13.754Z",
-    "finishedAt": "2026-09-24T01:00:13.794Z",
-    "durationMs": 40,
+    "startedAt": "2026-09-29T00:38:14.101Z",
+    "finishedAt": "2026-09-29T00:38:14.116Z",
+    "durationMs": 15,
     "status": "PASS",
     "assertions": [
       "PASS: Rol OPERATOR es bloqueado con HTTP 403 Forbidden [403 === 403]",
@@ -317,14 +347,14 @@
     "id": "ESC-17",
     "name": "Persistencia Post-Reinicio de Servidor",
     "method": "SERVER_RESTART_PERSISTENCE",
-    "startedAt": "2026-09-24T01:00:13.794Z",
-    "finishedAt": "2026-09-24T01:00:15.002Z",
-    "durationMs": 1208,
+    "startedAt": "2026-09-29T00:38:14.116Z",
+    "finishedAt": "2026-09-29T00:38:15.133Z",
+    "durationMs": 1017,
     "status": "PASS",
     "assertions": [
       "PASS: Servidor reiniciado levantó exitosamente",
       "PASS: Lead real recuperado con HTTP 200 tras reinicio [200 === 200]",
-      "PASS: ID del lead persistió intacto [0068fb58-b128-48fc-8ac0-04bd31b81257 === 0068fb58-b128-48fc-8ac0-04bd31b81257]",
+      "PASS: ID del lead persistió intacto [1c983efc-3bf8-43cf-8143-aae3a10cf08a === 1c983efc-3bf8-43cf-8143-aae3a10cf08a]",
       "PASS: Status RESPONDED persistió tras reinicio [RESPONDED === RESPONDED]",
       "PASS: Hechos confirmados persistieron tras reinicio",
       "PASS: Borradores persistieron tras reinicio",
@@ -338,9 +368,9 @@
     "id": "ESC-18",
     "name": "Recorrido Integral, UI, Responsividad y Cronometraje de Demostración",
     "method": "PLAYWRIGHT_CHROME_REAL",
-    "startedAt": "2026-09-24T01:00:15.002Z",
-    "finishedAt": "2026-09-24T01:00:30.290Z",
-    "durationMs": 15288,
+    "startedAt": "2026-09-29T00:38:15.133Z",
+    "finishedAt": "2026-09-29T00:38:34.636Z",
+    "durationMs": 19503,
     "status": "PASS",
     "assertions": [
       "PASS: Desktop no presenta overflow horizontal [false === false]",

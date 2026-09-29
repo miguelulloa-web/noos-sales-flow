@@ -3,8 +3,8 @@ requirement: "MVP de Captura y Seguimiento Comercial con IA para NoosAdvisory ba
 modality: MUST
 type: MODIFICATION
 priority: HIGH
-status: VALIDATING
-current_stage: VALIDATING
+status: READY_FOR_RELEASE
+current_stage: READY_FOR_RELEASE
 owner: ORCHESTRATOR_PM
 decision_refs:
   - "Ruta A aprobada por Sponsor (2026-09-14)"
@@ -19,8 +19,7 @@ task_packets:
   - TP-02 (DONE)
   - TP-03 (DONE)
   - TP-04 (DONE)
-  - TP-05 (QA)
-
+  - TP-05 (DONE)
 
 commits_or_prs:
   - "8f214f5 (feat: implement TP-01 local foundation, persistence, auth and audit log)"
@@ -41,6 +40,7 @@ commits_or_prs:
   - "254c4ef (docs(governance): accept TP-04 and authorize TP-05)"
   - "b8b1c08 (feat(tp05): implement end-to-end integration, operational summary, and demo readiness)"
   - "59c9d13 (feat(tp05): fix synthetic reset isolation, server confirmation and draft lifecycle)"
+  - "5392255 (test(tp04): dinamizar fechas limites a futuro en prueba de workflow)"
 evidence:
   - "docs/aagm/02-solution-design/EV-003-solution-design.md"
   - "docs/aagm/03-planning/EV-004-planning.md"
@@ -50,8 +50,10 @@ evidence:
   - "docs/aagm/04-delivery/evidence/EV-TP-04.md"
   - "docs/aagm/04-delivery/evidence/EV-TP-05.md"
 qa_ref: "docs/aagm/04-delivery/qa/QA-TP-05.md"
+quality:
+  qa: PASS
 release: null
 release_gate: NOT_EVALUATED
 environment: DEV
 production_validation_ref: null
-next_action: "Resolver el agotamiento de cuota de Google Gemini API (HTTP 429) para desbloquear los 4 escenarios de IA en QA de TP-05 antes de solicitar Release Gate"
+next_action: "Solicitar autorización expresa del Sponsor para evaluar formalmente el Release Gate de CHG-001"

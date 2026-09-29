@@ -27,9 +27,9 @@
     "hasDocumentOverflow": false
   },
   "automatedTechnicalSequence": {
-    "startedAt": "2026-09-24T01:00:17.543Z",
-    "finishedAt": "2026-09-24T01:00:24.337Z",
-    "elapsedSeconds": 7,
+    "startedAt": "2026-09-29T00:38:16.795Z",
+    "finishedAt": "2026-09-29T00:38:31.038Z",
+    "elapsedSeconds": 14,
     "description": "Secuencia técnica automatizada (flujo de integración UI e ingesta)",
     "status": "PASS"
   },
