@@ -25,7 +25,7 @@
   - **Respaldo Recuperable:** Se generó y verificó un bundle local completo en `/Users/miguelulloa/Documents/GitHub/noos-sales-flow-pre-sanitization-d6b2e9c.bundle` clasificado como sensible y no versionado.
 - [!] **Estado de Publicación Remota (`RELEASE_NOT_READY` para Push Remoto)**:
   - **Bloqueo Preventivo Vigente:** Si bien el árbol y el historial alcanzable de Git están 100% limpios y verificados, la publicación remota a GitHub continúa bloqueada (`RELEASE_NOT_READY`) hasta que el Sponsor ejecute la rotación interactiva de las contraseñas de las cuentas de usuario existentes en la base de datos local SQLite.
-  - **Utilidad Canónica Implementada:** Se implementó y validó formalmente la herramienta interactiva `npm run rotate-password -- <email>`, respaldada por una suite de pruebas dedicadas (`tests/password_rotation.test.js`) con 9/9 PASS sin alterar la base de datos real.
+  - **Utilidad Canónica Blindada y Verificada:** Se implementó y blindó formalmente la herramienta interactiva `npm run rotate-password -- <email>`, respaldada por una suite de pruebas dedicadas (`tests/password_rotation.test.js`) con 21/21 PASS sin alterar la base de datos real. Cubre entrada carácter a carácter y bloques pegados con `Enter`, enmascaramiento con asteriscos, restauración de terminal, validación estricta de hash bcrypt (`isValidBcryptHash`), atomicidad transaccional inmediata (`BEGIN IMMEDIATE`) y aislamiento riguroso.
   - **Comportamiento de `init-db`:** Se certifica que `npm run init-db` **no rota contraseñas existentes**; únicamente crea las cuentas cuando no existen previamente. Por ende, la rotación de credenciales locales existentes no puede realizarse con `init-db` y debe ejecutarse mediante la utilidad dedicada.
 
 ---
@@ -44,7 +44,7 @@
 - Informe formal en [`docs/aagm/04-delivery/qa/QA-TP-05.md`](file:///Users/miguelulloa/Documents/GitHub/noos-sales-flow/docs/aagm/04-delivery/qa/QA-TP-05.md) con resultado funcional `PASS` (18/18 escenarios PASS).
 
 ### 2.4 Regresión y Protected Baselines (`PASS`)
-- Suite automatizada completa en **65/65 PASS** (8 suites, 0 fallos, 0 skipped). Triggers de SQLite íntegros.
+- Suite automatizada completa en **77/77 PASS** (8 archivos de prueba, 0 fallos, 0 skipped; suites: 0 reportado por Node). Triggers de SQLite íntegros.
 
 ### 2.5 CI / Build / Controles Requeridos (`DEFERRED` Justificado bajo Ruta A)
 - Clasificado como `DEFERRED` justificado bajo el perfil de riesgo de la Ruta A para desarrollo local.
@@ -52,7 +52,7 @@
 ### 2.6 Seguridad, Gestión de Riesgos e Higiene de Repositorio (`PARTIAL` — Bloqueo Preventivo de Push Remoto)
 - Los riesgos de datos en reset sintético, inyección de prompts y estados STALE de borradores están resueltos y verificados con pruebas.
 - **Higiene de Historia Git:** Certificada como limpia (`PASS`) en todas las referencias alcanzables desde `main` tras el rebase interactivo controlado, sin secretos operacionales alcanzables.
-- **Mecanismo de Rotación:** Implementado en la capa de datos (`rotateUserPassword`) y CLI (`npm run rotate-password`), validado con 9 pruebas transaccionales sin tocar la base real.
+- **Mecanismo de Rotación Blindado:** Implementado en la capa de datos (`rotateUserPassword`) y CLI (`npm run rotate-password`), validado con 21 pruebas unitarias y de input TTY sin tocar la base real.
 - **Bloqueo de Release / Push Remoto:** Se mantiene el bloqueo preventivo de publicación remota (`RELEASE_NOT_READY`) exclusivamente a la espera de la ejecución interactiva por parte del Sponsor de la rotación de contraseñas de las cuentas locales existentes en SQLite.
 - **Riesgo Operacional de IA:** Se mantiene registrado el riesgo de agotamiento de cuota diaria en Gemini API (Free Tier), mitigado por la ruta de contingencia manual (`MVP-11`).
 
@@ -88,7 +88,7 @@
 2. **Alcance del Candidato:**
    - Exclusivo para demostración comercial en DEV local (`http://localhost:3000`). Servicios GCP en `DEFERRED`.
 3. **Significado del Dictamen `RELEASE_NOT_READY`:**
-   - La funcionalidad y calidad técnica del software están aprobadas al 100% (56/56 tests, 18/18 QA).
+   - La funcionalidad y calidad técnica del software están aprobadas al 100% (77/77 tests en 8 archivos de prueba, 18/18 QA).
    - El historial de Git en `main` ha sido completamente saneado de credenciales operacionales preconfiguradas.
    - El estado `RELEASE_NOT_READY` responde estrictamente a la **pendiente rotación de contraseñas de las cuentas locales existentes en SQLite**: no se autoriza `git push` a un repositorio remoto hasta que el Sponsor apruebe el procedimiento técnico de rotación correspondiente.
 

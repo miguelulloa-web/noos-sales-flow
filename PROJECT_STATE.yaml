@@ -49,7 +49,7 @@ environments:
     physical_target: "http://localhost:3000"
     version: "v0.5.0-dev (TP-05 DONE · CHG-001 READY_FOR_RELEASE)"
     protection: UNPROTECTED
-    validation: "TP-05 DONE, 18/18 escenarios PASS, rotación local validada y 65/65 pruebas PASS"
+    validation: "TP-05 DONE, 18/18 escenarios PASS, rotación local blindada y validada (input oculto, bcrypt estricto, atomicidad inmediata) y 77/77 pruebas PASS en 8 archivos de prueba"
   - logical_name: STAGE_GCP
     physical_target: "Google Cloud Run"
     version: null
@@ -64,11 +64,11 @@ authorization:
   implementation_scope: "TP-05 — Integración, Resumen Operativo, 18 Escenarios y Preparación de Demostración (Completado y validado en DONE)"
   authorized_by: "Sponsor (Miguel Ulloa)"
   authorized_at: "2026-09-23T11:53:49-03:00"
-  notes: "Validación independiente completada con 18/18 escenarios PASS (Gemini 3.6 Flash real validado). Portapapeles validado en Chrome real. Utilidad de rotación validada. Suite en 65/65 PASS."
+  notes: "Validación independiente completada con 18/18 escenarios PASS (Gemini 3.6 Flash real validado). Portapapeles validado en Chrome real. Utilidad de rotación blindada (input interactivo seguro y validación bcrypt estricta). Suite en 77/77 PASS en 8 archivos de prueba."
   expires_on_scope_change: true
 next_action:
   sponsor: "Ejecutar interactivamente npm run rotate-password para las cuentas locales existentes antes de autorizar git push."
   internal: AWAITING_LOCAL_CREDENTIALS_ROTATION_EXECUTION
 dashboard:
   sync_status: SYNCED
-  last_synced_at: "2026-09-29T15:25:00-03:00"
+  last_synced_at: "2026-09-30T11:50:00-03:00"

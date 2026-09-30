@@ -323,8 +323,22 @@ export function getUserByEmail(email, db = getDb()) {
 }
 
 /**
+ * Validate that a string conforms to the canonical bcrypt hash format.
+ * Format: $2[aby]$<2-digit cost>$<53 base64 characters from ./A-Za-z0-9> (total length 60 chars)
+ * @param {string} hash
+ * @returns {boolean}
+ */
+export function isValidBcryptHash(hash) {
+  if (!hash || typeof hash !== 'string' || hash.length !== 60) {
+    return false;
+  }
+  return /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(hash);
+}
+
+/**
  * Transactionally rotate an existing user's password hash and revoke all their active sessions.
  * Appends an audit event to audit_log without storing passwords, hashes, or tokens.
+ * Enforces transaction atomicity with BEGIN IMMEDIATE prior to reading the target user.
  *
  * @param {object} params
  * @param {string} params.email
@@ -338,27 +352,32 @@ export function rotateUserPassword({ email, newPasswordHash, actorUserId = 'LOCA
   if (!normalizedEmail) {
     throw new Error('Email is required for password rotation');
   }
-  if (!newPasswordHash || typeof newPasswordHash !== 'string' || !newPasswordHash.startsWith('$2')) {
+  if (!newPasswordHash || !isValidBcryptHash(newPasswordHash)) {
     throw new Error('Valid bcrypt password hash is required for password rotation');
-  }
-
-  const user = getUserByEmail(normalizedEmail, db);
-  if (!user) {
-    throw new Error(`User with email "${normalizedEmail}" not found`);
   }
 
   db.exec('BEGIN IMMEDIATE;');
   try {
     const now = new Date().toISOString();
 
-    // 1. Update password hash exclusively
-    db.prepare(`
+    // 1. Read target user inside the active immediate transaction
+    const user = db.prepare('SELECT id, email FROM users WHERE email = ?').get(normalizedEmail);
+    if (!user) {
+      throw new Error(`User with email "${normalizedEmail}" not found`);
+    }
+
+    // 2. Update password hash exclusively and verify exactly one row is updated
+    const updateResult = db.prepare(`
       UPDATE users
       SET password_hash = ?
       WHERE id = ?
     `).run(newPasswordHash, user.id);
 
-    // 2. Revoke all active sessions for this user in auth_sessions
+    if (updateResult.changes !== 1) {
+      throw new Error(`Expected exactly 1 user row updated, but ${updateResult.changes} were affected`);
+    }
+
+    // 3. Revoke all active sessions for this user in auth_sessions
     const revokeResult = db.prepare(`
       UPDATE auth_sessions
       SET revoked_at = ?
@@ -367,7 +386,7 @@ export function rotateUserPassword({ email, newPasswordHash, actorUserId = 'LOCA
 
     const revokedSessionsCount = revokeResult.changes;
 
-    // 3. Register exactly one append-only audit event in audit_log
+    // 4. Register exactly one append-only audit event in audit_log
     const auditResult = appendAuditLog({
       leadId: null,
       eventType: 'USER_PASSWORD_ROTATED',
@@ -391,7 +410,11 @@ export function rotateUserPassword({ email, newPasswordHash, actorUserId = 'LOCA
       auditLogId: auditResult.id
     };
   } catch (err) {
-    db.exec('ROLLBACK;');
+    try {
+      db.exec('ROLLBACK;');
+    } catch {
+      // Ignore rollback failure if transaction already rolled back
+    }
     throw err;
   }
 }

@@ -136,16 +136,17 @@ npm run rotate-password -- operador@noosadvisory.com
 
 > **IMPORTANTE:**
 > * `npm run init-db` **no rota contraseñas existentes**; su función es idempotente y preserva los usuarios ya creados.
-> * `npm run rotate-password` exige una sesión interactiva TTY y solicita la nueva contraseña (mínimo 12 caracteres) de forma oculta en la terminal.
+> * `npm run rotate-password` exige una sesión interactiva TTY y solicita la nueva contraseña (mínimo 12 caracteres) de forma oculta en la terminal con enmascaramiento (`*`).
+> * La captura de entrada (`promptSecret`) procesa de forma segura tanto el tecleo carácter por carácter como bloques pegados que incluyan o no el salto de línea (`Enter`), restaura deterministamente el modo del terminal, limpia todos los listeners ante Ctrl+C o interrupciones, y nunca refleja el texto plano en pantalla ni en streams de error.
 > * Las contraseñas nunca deben pasarse como argumentos de línea de comandos.
-> * La rotación revoca atómicamente todas las sesiones activas del usuario en `auth_sessions` y registra un evento append-only en `audit_log` (`USER_PASSWORD_ROTATED`) sin registrar datos sensibles.
+> * La rotación valida estrictamente el hash bcrypt con el estándar canónico, utiliza transacciones exclusivas (`BEGIN IMMEDIATE`) verificando exactamente una fila afectada, revoca atómicamente todas las sesiones activas del usuario en `auth_sessions` y registra un evento append-only en `audit_log` (`USER_PASSWORD_ROTATED`) sin registrar datos sensibles.
 > * Se preservan íntegros todos los leads, hechos confirmados, borradores, acciones y logs históricos.
 
 ---
 
 ## 7. Ejecución de la Suite Completa de Pruebas
 
-Para ejecutar las 65 pruebas automatizadas de regresión, integración y gobernanza:
+Para ejecutar las 77 pruebas automatizadas distribuidas en 8 archivos de prueba (Node reporta `suites: 0`):
 
 ```bash
 npm test
@@ -159,7 +160,7 @@ La suite cubre:
 5. `tp04_endpoints_and_workflow.test.js`: Operadores, acciones, vencimientos y filtros (2 pruebas).
 6. `tp04_review_corrections.test.js`: Migración segura sin rotura de FKs, DST Santiago y exportación agrupada (6 pruebas).
 7. `tp05_integration_and_operational_summary.test.js`: Resumen operativo real, resiliencia manual y reinicio sintético por ADMIN (8 pruebas).
-8. `password_rotation.test.js`: Rotación transaccional de contraseñas, revocación de sesiones, auditoría sin secretos y aislamiento (9 pruebas).
+8. `password_rotation.test.js`: Validación estricta de formato bcrypt (`isValidBcryptHash`), rotación transaccional con `BEGIN IMMEDIATE`, revocación atómica de sesiones, auditoría sin secretos, captura interactiva segura de contraseñas (tecleo, pegado en bloque, enmascaramiento con asteriscos, restauración de TTY y desinstalación de listeners) y aislamiento riguroso (21 pruebas).
 
 ---
 

@@ -58,4 +58,4 @@ release: null
 release_gate: RELEASE_NOT_READY
 environment: DEV
 production_validation_ref: null
-next_action: "Saneamiento de historia completado. Mecanismo de rotación transaccional implementado y verificado (65/65 tests PASS). Release Gate en RELEASE_NOT_READY a la espera de ejecución interactiva de rotación de contraseñas de cuentas locales existentes antes de push remoto."
+next_action: "Saneamiento de historia completado. Mecanismo de rotación transaccional e input interactivo blindado implementado y verificado (77/77 tests PASS en 8 archivos de prueba). Release Gate en RELEASE_NOT_READY a la espera de ejecución interactiva de rotación de contraseñas de cuentas locales existentes antes de push remoto."
