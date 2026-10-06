@@ -14,7 +14,7 @@
 
 - [x] **Repositorio Confirmado**: `noos-sales-flow`
 - [x] **Rama Activa**: `main`
-- [x] **HEAD Evaluado**: `6e1b72c`
+- [x] **HEAD Evaluado**: `90c1ce6`
 - [x] **Árbol de Trabajo**: Limpio
 - [x] **Auditoría de Higiene y Saneamiento de Historia Git (`PASS` en historia alcanzable)**:
   - **Saneamiento Histórico Ejecutado:** Mediante rebase interactivo local controlado autorizado por el Sponsor, se reescribieron los commits locales en [`docs/operations/GUIA_ARRANQUE_LOCAL.md`](file:///Users/miguelulloa/Documents/GitHub/noos-sales-flow/docs/operations/GUIA_ARRANQUE_LOCAL.md), eliminando toda asignación de `SESSION_SECRET` y vaciando contraseñas operacionales de inicialización.
@@ -26,6 +26,8 @@
   - **Verificación Manual de Login (`LOGIN_CHECK PASS`):** Comprobado exitosamente el inicio y cierre de sesión en navegador local para ambas cuentas con sus nuevas contraseñas.
 - [x] **Diagnóstico de Contingencia Gemini (`HISTORICAL_CONTINGENCY_EXPECTED`)**:
   - Se diagnosticó en modo solo lectura que el aviso `QUOTA_EXCEEDED` en el panel corresponde estrictamente a la incidencia histórica del 18 de septiembre de 2026. La interfaz refleja correctamente el estado persistido del lead y la activación de contingencia manual, sin evidencia de bloqueo actual en la cuota de Gemini.
+- [x] **Publicación Controlada en GitHub (`PASS`)**:
+  - Publicada la rama `main` en `https://github.com/miguelulloa-web/noos-sales-flow.git` (primer commit de release publicado: `90c1ce6`).
 
 ---
 
@@ -72,7 +74,7 @@
 - Sincronización horaria y de estados alineada entre `PROJECT_STATE.yaml`, `BACKLOG.yaml`, `CHG-001.yaml` y `PROJECT_DASHBOARD.html`.
 
 ### 2.11 Aprobaciones ASK Vigentes (`PASS`)
-- Requisitos, diseño, planes y cierre de rotación aprobados formalmente por el Sponsor.
+- Requisitos, diseño, planes, cierre de rotación y autorización de push aprobados formalmente por el Sponsor.
 
 ---
 
@@ -82,9 +84,9 @@
    - Declarado transparentemente como `NOT_EXECUTED` (la secuencia técnica automatizada de 14s es `PASS`). Constituye una condición previa operacional a cargo del Sponsor antes de exponer la solución a clientes externos.
 2. **Alcance del Candidato:**
    - Exclusivo para demostración comercial en DEV local (`http://localhost:3000`). Servicios GCP en `DEFERRED`.
-3. **Estado de Publicación Remota:**
-   - La funcionalidad, seguridad y rotación de credenciales están formalmente aprobadas (`RELEASE_READY`).
-   - La ejecución de `git push`, despliegue o publicación remota permanece estrictamente suspendida a la espera de una autorización explícita y separada del Sponsor.
+3. **Estado de Publicación y Despliegue:**
+   - Publicación en GitHub: `PASS` (rama `main`, repositorio `https://github.com/miguelulloa-web/noos-sales-flow.git`).
+   - Despliegues a ambientes cloud y operaciones en GCP: No autorizados y no ejecutados (`DEFERRED`), a la espera de decisión explícita del Sponsor.
 
 ---
 
@@ -92,4 +94,4 @@
 
 **`RELEASE_READY`**
 
-El candidato de release CHG-001 cumple con la totalidad de los criterios de calidad, seguridad y gobernanza. Se mantiene bloqueado el `git push` hacia repositorios remotos hasta contar con la autorización separada del Sponsor.
+El candidato de release CHG-001 se encuentra formalizado y publicado exitosamente en GitHub. Las operaciones de despliegue cloud permanecen suspendidas a la espera de instrucciones del Sponsor.
