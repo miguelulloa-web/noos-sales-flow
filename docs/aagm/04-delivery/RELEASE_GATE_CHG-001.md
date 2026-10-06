@@ -43,7 +43,8 @@
 - Informe formal en [`docs/aagm/04-delivery/qa/QA-TP-05.md`](file:///Users/miguelulloa/Documents/GitHub/noos-sales-flow/docs/aagm/04-delivery/qa/QA-TP-05.md) con resultado funcional `PASS` (18/18 escenarios PASS).
 
 ### 2.4 Regresión y Protected Baselines (`PASS`)
-- Suite automatizada completa en **77/77 PASS** (8 archivos de prueba, 0 fallos, 0 skipped en ejecución activa). Triggers de SQLite íntegros.
+- **Suite Automatizada Canónica:** **77/77 PASS** (8 archivos de prueba, 0 fallos, 0 skipped en ejecución nativa local). Triggers de SQLite íntegros.
+- **Aclaración de Comportamiento en Sandbox:** En entornos con aislamiento estricto de red loopback (sandbox restringido), se observa `76 PASS + 1 skipped` debido a que `tests/blackbox.test.js` captura `EPERM` en el intento de socket local y omite la prueba de subproceso de forma controlada (`t.skip`). Esto no representa pérdida de cobertura ni regresión funcional.
 
 ### 2.5 CI / Build / Controles Requeridos (`DEFERRED` Justificado bajo Ruta A)
 - Clasificado como `DEFERRED` justificado bajo el perfil de riesgo de la Ruta A para desarrollo local.

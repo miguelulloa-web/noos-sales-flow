@@ -49,7 +49,7 @@ environments:
     physical_target: "http://localhost:3000"
     version: "v0.5.0-dev (TP-05 DONE · CHG-001 RELEASE_READY)"
     protection: UNPROTECTED
-    validation: "TP-05 DONE, 18/18 escenarios PASS, rotación local completada y validada (input TTY seguro, bcrypt estricto, atomicidad inmediata, login PASS admin/operador) y 77/77 pruebas PASS en 8 archivos de prueba"
+    validation: "TP-05 DONE, 18/18 escenarios PASS, rotación local completada y validada (input TTY seguro, bcrypt estricto, atomicidad inmediata, login PASS admin/operador) y suite canónica en 77/77 pruebas PASS en 8 archivos de prueba (76 PASS + 1 skipped en sandbox restringido por EPERM loopback sin regresión)"
   - logical_name: STAGE_GCP
     physical_target: "Google Cloud Run"
     version: null
