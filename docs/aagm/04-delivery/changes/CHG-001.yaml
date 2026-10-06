@@ -55,7 +55,7 @@ release_gate_ref: "docs/aagm/04-delivery/RELEASE_GATE_CHG-001.md"
 quality:
   qa: PASS
 release: null
-release_gate: RELEASE_NOT_READY
+release_gate: RELEASE_READY
 environment: DEV
 production_validation_ref: null
-next_action: "Saneamiento de historia completado. Mecanismo de rotación transaccional e input interactivo blindado implementado y verificado (77/77 tests PASS en 8 archivos de prueba). Release Gate en RELEASE_NOT_READY a la espera de ejecución interactiva de rotación de contraseñas de cuentas locales existentes antes de push remoto."
+next_action: "Saneamiento de historia completado. Mecanismo de rotación transaccional e input interactivo blindado ejecutado y verificado (PASS admin y operador, 0 sesiones activas, auditoría PASS). Login manual verificado (PASS). Contingencia histórica Gemini confirmada (HISTORICAL_CONTINGENCY_EXPECTED). Release Gate formalizado en RELEASE_READY a la espera de autorización explícita de git push remoto."

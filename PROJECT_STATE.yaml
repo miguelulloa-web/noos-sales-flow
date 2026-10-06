@@ -27,11 +27,11 @@ transition:
   recorded_at: "2026-09-29T08:35:00-03:00"
 readiness:
   delivery: READY_FOR_RELEASE
-  release: NOT_READY
+  release: RELEASE_READY
 integrations:
   - name: "Google Gemini API (gemini-3.6-flash)"
     state: VALIDATED
-    notes: "Integración validada empíricamente en ambiente real con cuota activa en el proyecto Noos Sales (gen-lang-client-0479283212)."
+    notes: "Integración validada empíricamente en ambiente real con cuota activa en el proyecto Noos Sales (gen-lang-client-0479283212). Registros de contingencia en BD corresponden a incidencia histórica del 18-Sep-2026 (HISTORICAL_CONTINGENCY_EXPECTED)."
   - name: "SQLite Database Engine (DEV Local)"
     state: VALIDATED
   - name: "Google Cloud Run"
@@ -47,9 +47,9 @@ changes:
 environments:
   - logical_name: DEV
     physical_target: "http://localhost:3000"
-    version: "v0.5.0-dev (TP-05 DONE · CHG-001 READY_FOR_RELEASE)"
+    version: "v0.5.0-dev (TP-05 DONE · CHG-001 RELEASE_READY)"
     protection: UNPROTECTED
-    validation: "TP-05 DONE, 18/18 escenarios PASS, rotación local blindada y validada (input oculto, bcrypt estricto, atomicidad inmediata) y 77/77 pruebas PASS en 8 archivos de prueba"
+    validation: "TP-05 DONE, 18/18 escenarios PASS, rotación local completada y validada (input TTY seguro, bcrypt estricto, atomicidad inmediata, login PASS admin/operador) y 77/77 pruebas PASS en 8 archivos de prueba"
   - logical_name: STAGE_GCP
     physical_target: "Google Cloud Run"
     version: null
@@ -59,16 +59,16 @@ quality:
   empirical_validation: PASS
   qa: PASS
   regression: PASS
-  release_gate: PARTIAL
+  release_gate: PASS
 authorization:
   implementation_scope: "TP-05 — Integración, Resumen Operativo, 18 Escenarios y Preparación de Demostración (Completado y validado en DONE)"
   authorized_by: "Sponsor (Miguel Ulloa)"
-  authorized_at: "2026-09-23T11:53:49-03:00"
-  notes: "Validación independiente completada con 18/18 escenarios PASS (Gemini 3.6 Flash real validado). Portapapeles validado en Chrome real. Utilidad de rotación blindada (input interactivo seguro y validación bcrypt estricta). Suite en 77/77 PASS en 8 archivos de prueba."
+  authorized_at: "2026-10-05T22:00:00-03:00"
+  notes: "Rotación interactiva de credenciales locales completada personalmente por el Sponsor (PASS). Verificación de auditoría y revocación de sesiones: PASS (cero sesiones activas). Login manual de admin y operador: PASS. Contingencia histórica Gemini verificada (HISTORICAL_CONTINGENCY_EXPECTED). Release Gate: RELEASE_READY. Git push y despliegues permanecen bloqueados."
   expires_on_scope_change: true
 next_action:
-  sponsor: "Ejecutar interactivamente npm run rotate-password para las cuentas locales existentes antes de autorizar git push."
-  internal: AWAITING_LOCAL_CREDENTIALS_ROTATION_EXECUTION
+  sponsor: "Evaluar y proporcionar autorización explícita para la ejecución de git push hacia el repositorio remoto."
+  internal: AWAITING_SPONSOR_PUSH_AUTHORIZATION
 dashboard:
   sync_status: SYNCED
-  last_synced_at: "2026-09-30T11:50:00-03:00"
+  last_synced_at: "2026-10-05T22:05:00-03:00"

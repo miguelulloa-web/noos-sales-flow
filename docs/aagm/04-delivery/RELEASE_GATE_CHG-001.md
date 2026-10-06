@@ -2,11 +2,11 @@
 
 - **Identificador de Release Gate**: `RG-CHG-001`
 - **Change Evaluado**: `CHG-001` (MVP de Captura y Seguimiento Comercial con IA para NoosAdvisory bajo Ruta A)
-- **Fecha de Evaluación**: `2026-09-29`
+- **Fecha de Evaluación**: `2026-10-05`
 - **Owner**: `ORCHESTRATOR_PM`
-- **Línea Base Evaluada**: `0be9c52` en la rama `main` (rectificada en `d997158` tras saneamiento de historia)
+- **Línea Base Evaluada**: `6e1b72c` en la rama `main`
 - **Ambiente Objetivo**: `DEV` (`http://localhost:3000`, macOS local)
-- **Resultado Formal**: **`RELEASE_NOT_READY`** (Bloqueo preventivo de publicación remota hasta decisión de rotación de credenciales locales)
+- **Resultado Formal**: **`RELEASE_READY`** (Publicación remota y despliegues bloqueados a la espera de autorización expresa del Sponsor)
 
 ---
 
@@ -14,19 +14,18 @@
 
 - [x] **Repositorio Confirmado**: `noos-sales-flow`
 - [x] **Rama Activa**: `main`
-- [x] **HEAD Evaluado**: `0be9c52` (rectificado en `d997158`)
-- [x] **Árbol de Trabajo**: Limpio tras corrección documental
+- [x] **HEAD Evaluado**: `6e1b72c`
+- [x] **Árbol de Trabajo**: Limpio
 - [x] **Auditoría de Higiene y Saneamiento de Historia Git (`PASS` en historia alcanzable)**:
-  - **Saneamiento Histórico Ejecutado:** Mediante rebase interactivo local controlado autorizado por el Sponsor, se reescribieron los 11 commits locales desde el commit inicial de TP-05 (`45939fe`, anteriormente `b8b1c08`). En la versión histórica de [`docs/operations/GUIA_ARRANQUE_LOCAL.md`](file:///Users/miguelulloa/Documents/GitHub/noos-sales-flow/docs/operations/GUIA_ARRANQUE_LOCAL.md) se eliminó la asignación literal de `SESSION_SECRET`, se vaciaron las contraseñas operacionales de inicialización y se eliminó toda presentación de contraseñas por defecto.
-  - **Certificación de Historia Alcanzable y Distinción Categórica de Valores:**
-    1. *Secretos y Credenciales Operacionales:* **Ausencia total** en todo el grafo alcanzable de `main`. No existen secretos de sesión, contraseñas operacionales, claves de API reales ni claves privadas.
-    2. *Marcadores de Configuración y Ejemplos de Plantilla:* Antiguas asignaciones ilustrativas de ejemplo en `.env.example` previas a TP-05 constituyen marcadores de documentación y no valores operacionales de un entorno real. En el árbol actual, las variables de contraseña y clave en `.env.example` permanecen explícitamente vacías.
-    3. *Fixtures Sintéticos Confinados a Pruebas:* Permanecen exclusivamente fixtures ficticios y hashes sintéticos estrictamente acotados a las suites de prueba automatizadas (`tests/`).
-  - **Respaldo Recuperable:** Se generó y verificó un bundle local completo en `/Users/miguelulloa/Documents/GitHub/noos-sales-flow-pre-sanitization-d6b2e9c.bundle` clasificado como sensible y no versionado.
-- [!] **Estado de Publicación Remota (`RELEASE_NOT_READY` para Push Remoto)**:
-  - **Bloqueo Preventivo Vigente:** Si bien el árbol y el historial alcanzable de Git están 100% limpios y verificados, la publicación remota a GitHub continúa bloqueada (`RELEASE_NOT_READY`) hasta que el Sponsor ejecute la rotación interactiva de las contraseñas de las cuentas de usuario existentes en la base de datos local SQLite.
-  - **Utilidad Canónica Blindada y Verificada:** Se implementó y blindó formalmente la herramienta interactiva `npm run rotate-password -- <email>`, respaldada por una suite de pruebas dedicadas (`tests/password_rotation.test.js`) con 21/21 PASS sin alterar la base de datos real. Cubre entrada carácter a carácter y bloques pegados con `Enter`, enmascaramiento con asteriscos, restauración de terminal, validación estricta de hash bcrypt (`isValidBcryptHash`), atomicidad transaccional inmediata (`BEGIN IMMEDIATE`) y aislamiento riguroso.
-  - **Comportamiento de `init-db`:** Se certifica que `npm run init-db` **no rota contraseñas existentes**; únicamente crea las cuentas cuando no existen previamente. Por ende, la rotación de credenciales locales existentes no puede realizarse con `init-db` y debe ejecutarse mediante la utilidad dedicada.
+  - **Saneamiento Histórico Ejecutado:** Mediante rebase interactivo local controlado autorizado por el Sponsor, se reescribieron los commits locales en [`docs/operations/GUIA_ARRANQUE_LOCAL.md`](file:///Users/miguelulloa/Documents/GitHub/noos-sales-flow/docs/operations/GUIA_ARRANQUE_LOCAL.md), eliminando toda asignación de `SESSION_SECRET` y vaciando contraseñas operacionales de inicialización.
+  - **Certificación de Historia Alcanzable:** Ausencia total de secretos operacionales y contraseñas en todo el grafo alcanzable de `main`.
+- [x] **Rotación Local de Credenciales (`PASS`)**:
+  - **Ejecución Interactiva por Sponsor:** El Sponsor ejecutó personalmente la rotación interactiva para las cuentas `admin@noosadvisory.com` y `operador@noosadvisory.com` utilizando la herramienta `npm run rotate-password`.
+  - **Auditoría Transaccional Append-Only:** Verificada la creación de exactamente un evento `USER_PASSWORD_ROTATED` por cuenta (admin: `626c941e-de5c-42e6-8888-979ba699f1e3`, operador: `f9cbe845-f9ec-4f33-b259-ec873d1dbd13`), con actor `LOCAL_MAINTENANCE_CLI`.
+  - **Revocación de Sesiones:** Confirmado que ambas cuentas quedaron con 0 sesiones activas en `auth_sessions`.
+  - **Verificación Manual de Login (`LOGIN_CHECK PASS`):** Comprobado exitosamente el inicio y cierre de sesión en navegador local para ambas cuentas con sus nuevas contraseñas.
+- [x] **Diagnóstico de Contingencia Gemini (`HISTORICAL_CONTINGENCY_EXPECTED`)**:
+  - Se diagnosticó en modo solo lectura que el aviso `QUOTA_EXCEEDED` en el panel corresponde estrictamente a la incidencia histórica del 18 de septiembre de 2026. La interfaz refleja correctamente el estado persistido del lead y la activación de contingencia manual, sin evidencia de bloqueo actual en la cuota de Gemini.
 
 ---
 
@@ -44,24 +43,20 @@
 - Informe formal en [`docs/aagm/04-delivery/qa/QA-TP-05.md`](file:///Users/miguelulloa/Documents/GitHub/noos-sales-flow/docs/aagm/04-delivery/qa/QA-TP-05.md) con resultado funcional `PASS` (18/18 escenarios PASS).
 
 ### 2.4 Regresión y Protected Baselines (`PASS`)
-- Suite automatizada completa en **77/77 PASS** (8 archivos de prueba, 0 fallos, 0 skipped; suites: 0 reportado por Node). Triggers de SQLite íntegros.
+- Suite automatizada completa en **77/77 PASS** (8 archivos de prueba, 0 fallos, 0 skipped en ejecución activa). Triggers de SQLite íntegros.
 
 ### 2.5 CI / Build / Controles Requeridos (`DEFERRED` Justificado bajo Ruta A)
 - Clasificado como `DEFERRED` justificado bajo el perfil de riesgo de la Ruta A para desarrollo local.
 
-### 2.6 Seguridad, Gestión de Riesgos e Higiene de Repositorio (`PARTIAL` — Bloqueo Preventivo de Push Remoto)
+### 2.6 Seguridad, Gestión de Riesgos e Higiene de Repositorio (`PASS`)
 - Los riesgos de datos en reset sintético, inyección de prompts y estados STALE de borradores están resueltos y verificados con pruebas.
-- **Higiene de Historia Git:** Certificada como limpia (`PASS`) en todas las referencias alcanzables desde `main` tras el rebase interactivo controlado, sin secretos operacionales alcanzables.
-- **Mecanismo de Rotación Blindado:** Implementado en la capa de datos (`rotateUserPassword`) y CLI (`npm run rotate-password`), validado con 21 pruebas unitarias y de input TTY sin tocar la base real.
-- **Bloqueo de Release / Push Remoto:** Se mantiene el bloqueo preventivo de publicación remota (`RELEASE_NOT_READY`) exclusivamente a la espera de la ejecución interactiva por parte del Sponsor de la rotación de contraseñas de las cuentas locales existentes en SQLite.
-- **Riesgo Operacional de IA:** Se mantiene registrado el riesgo de agotamiento de cuota diaria en Gemini API (Free Tier), mitigado por la ruta de contingencia manual (`MVP-11`).
+- **Higiene de Historia Git:** Certificada como limpia (`PASS`) en todas las referencias alcanzables desde `main`.
+- **Rotación de Credenciales:** Verificada técnica y funcionalmente con login exitoso (`PASS`).
+- **Riesgo Operacional de IA:** Contingencia manual verificada en BD (`MVP-11`), clasificada como `HISTORICAL_CONTINGENCY_EXPECTED`.
 
 ### 2.7 Evidencia Durable y Reproducible (`PASS`)
 - Evidencia durable registrada en `docs/aagm/04-delivery/evidence/`.
-- **Inventario Visual Verificado:** Existen **20 capturas de pantalla de navegador** versionadas en `docs/aagm/04-delivery/evidence/screenshots/`:
-  - 7 capturas correspondientes a TP-03 (`01_master_detail_lead_selected.png` a `07_responsive_mobile_view.png`).
-  - 8 capturas correspondientes a TP-04 (`tp04_01_inbox_all_and_filters.png` a `tp04_08_responsive_mobile_view.png`).
-  - 5 capturas correspondientes a TP-05 (`tp05_01_operational_summary_and_inbox.png` a `tp05_05_responsive_mobile_view.png`).
+- **Inventario Visual Verificado:** Existen **20 capturas de pantalla de navegador** versionadas en `docs/aagm/04-delivery/evidence/screenshots/`.
 
 ### 2.8 Ambiente / Target / Configuración / Secrets / Integraciones Validados (`PASS` para DEV)
 - `gcloud` en perfil `noos-sales` apuntando a `gen-lang-client-0479283212`.
@@ -70,14 +65,13 @@
 
 ### 2.9 Deployment, Rollback y Limitación de Respaldo SQLite (`PASS` con Limitación Aceptada)
 - Guía de arranque local operativa y saneada de credenciales predeterminadas.
-- **Declaración de Limitación de Rollback:** La reversión mediante Git (`git revert` / `git checkout`) permite restaurar deterministamente el código de la aplicación, pero **no realiza respaldo ni restauración automática del estado de la base de datos SQLite**.
-- **Aceptación de Riesgo:** Para el alcance actual de demostración local con datos sintéticos en DEV, esta limitación se clasifica como un riesgo aceptable y proporcional. Para futuras etapas con datos reales o persistencia externa, se requerirá un procedimiento de dump/backup independiente.
+- Limitación de rollback para SQLite aceptada para alcance de demostración local DEV.
 
 ### 2.10 Dashboard y Documentación Sincronizados (`PASS`)
 - Sincronización horaria y de estados alineada entre `PROJECT_STATE.yaml`, `BACKLOG.yaml`, `CHG-001.yaml` y `PROJECT_DASHBOARD.html`.
 
 ### 2.11 Aprobaciones ASK Vigentes (`PASS`)
-- Requisitos, diseño y planes aprobados formalmente por el Sponsor.
+- Requisitos, diseño, planes y cierre de rotación aprobados formalmente por el Sponsor.
 
 ---
 
@@ -87,15 +81,14 @@
    - Declarado transparentemente como `NOT_EXECUTED` (la secuencia técnica automatizada de 14s es `PASS`). Constituye una condición previa operacional a cargo del Sponsor antes de exponer la solución a clientes externos.
 2. **Alcance del Candidato:**
    - Exclusivo para demostración comercial en DEV local (`http://localhost:3000`). Servicios GCP en `DEFERRED`.
-3. **Significado del Dictamen `RELEASE_NOT_READY`:**
-   - La funcionalidad y calidad técnica del software están aprobadas al 100% (77/77 tests en 8 archivos de prueba, 18/18 QA).
-   - El historial de Git en `main` ha sido completamente saneado de credenciales operacionales preconfiguradas.
-   - El estado `RELEASE_NOT_READY` responde estrictamente a la **pendiente rotación de contraseñas de las cuentas locales existentes en SQLite**: no se autoriza `git push` a un repositorio remoto hasta que el Sponsor apruebe el procedimiento técnico de rotación correspondiente.
+3. **Estado de Publicación Remota:**
+   - La funcionalidad, seguridad y rotación de credenciales están formalmente aprobadas (`RELEASE_READY`).
+   - La ejecución de `git push`, despliegue o publicación remota permanece estrictamente suspendida a la espera de una autorización explícita y separada del Sponsor.
 
 ---
 
 ## 4. Dictamen Final
 
-**`RELEASE_NOT_READY`**
+**`RELEASE_READY`**
 
-Se suspende la autorización de publicación remota (`git push`), despliegue o cierre de CHG-001 hasta que el Sponsor evalúe y decida sobre el procedimiento de rotación de contraseñas para los usuarios locales existentes.
+El candidato de release CHG-001 cumple con la totalidad de los criterios de calidad, seguridad y gobernanza. Se mantiene bloqueado el `git push` hacia repositorios remotos hasta contar con la autorización separada del Sponsor.
